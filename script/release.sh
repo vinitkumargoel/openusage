@@ -31,7 +31,8 @@ BUNDLE_ID="com.robinebers.openusage"
 MIN_SYSTEM_VERSION="26.0"
 VERSION="$OPENUSAGE_VERSION"
 # CFBundleShortVersionString must be numeric (x.y.z); strip any pre-release suffix like "-beta.1".
-# The full VERSION (with any suffix) is still used for the DMG filename.
+# The full VERSION (with any suffix) is used for the DMG filename and the OUMarketingVersion Info.plist
+# key, which is what the app shows in its footer/About (see AppInfo.swift).
 SHORT_VERSION="${VERSION%%-*}"
 BUILD="${OPENUSAGE_BUILD:-$(git rev-list --count HEAD)}"
 FEED_URL="${FEED_URL:-https://robinebers.github.io/openusage/appcast.xml}"
@@ -110,6 +111,7 @@ cat >"$APP_CONTENTS/Info.plist" <<PLIST
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>$SHORT_VERSION</string>
   <key>CFBundleVersion</key><string>$BUILD</string>
+  <key>OUMarketingVersion</key><string>$VERSION</string>
   <key>LSMinimumSystemVersion</key><string>$MIN_SYSTEM_VERSION</string>
   <key>CFBundleIconName</key><string>AppIcon</string>
   <key>LSUIElement</key><true/>
