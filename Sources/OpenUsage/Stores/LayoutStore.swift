@@ -113,8 +113,7 @@ final class LayoutStore {
         } else {
             pinnedMetricIDs = Set(DefaultLayout.pinnedMetricIDs.filter { registry.descriptor(id: $0) != nil })
         }
-        menuBarStyle = defaults.string(forKey: menuBarStyleKey)
-            .flatMap(MenuBarStyle.init(rawValue:)) ?? .text
+        menuBarStyle = defaults.enumValue(forKey: menuBarStyleKey, default: .text)
 
         syncPlacedOrder(persistChanges: false)
     }

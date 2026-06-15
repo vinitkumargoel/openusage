@@ -46,6 +46,41 @@ enum Theme {
     /// Backing for lifted drag previews: material, so the floating card stays legible over the rows
     /// it passes instead of letting them bleed through a translucent fill.
     static let liftedCardFill = AnyShapeStyle(Material.regular)
+
+    /// The single corner radius for every metric/settings card surface and its lifted twin, so the
+    /// floating drag preview always matches the live card's shape.
+    static let cardCornerRadius: CGFloat = 12
+
+    /// The rounded rectangle shared by every card surface (live and lifted), so the shape is defined once.
+    static var cardShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
+    }
+}
+
+extension View {
+    /// The grouped-card surface used for provider/settings cards: the semantic quaternary fill in
+    /// the shared rounded shape. Pass `lifted: true` for the floating drag preview, which swaps the
+    /// fill for the legible material so the card reads over (not through) the rows it passes.
+    /// Routing every card site through this keeps the live card and its lifted twin one shape.
+    func cardSurface(lifted: Bool = false) -> some View {
+        background(lifted ? Theme.liftedCardFill : Theme.cardFill, in: Theme.cardShape)
+    }
+
+    /// A single-row lifted preview surface: the card fill plus the thin separator hairline that
+    /// fences a free-floating one-row chip off from the rows beneath it (the multi-row provider
+    /// previews don't take the hairline — the card outline alone reads as detached there).
+    func liftedRowSurface() -> some View {
+        cardSurface(lifted: true)
+            .overlay { Theme.cardShape.strokeBorder(.separator, lineWidth: 0.5) }
+    }
+
+    /// The trailing on/off switch styling shared by every settings + Customize row toggle: no inline
+    /// label (the row's leading text is the label), the native switch style, small control size.
+    func settingsSwitchStyle() -> some View {
+        labelsHidden()
+            .toggleStyle(.switch)
+            .controlSize(.small)
+    }
 }
 
 /// Saturated tint softened for Liquid Glass; Increase Contrast resolves to the full-strength

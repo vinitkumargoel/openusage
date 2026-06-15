@@ -2,17 +2,16 @@ import Foundation
 
 /// How wall-clock times read (the absolute reset labels): the system's 12/24-hour convention, or
 /// an explicit override — matching the original app's Auto/12h/24h setting.
-enum TimeFormatSetting: String, Hashable, Sendable, CaseIterable {
+enum TimeFormatSetting: String, Hashable, Sendable, CaseIterable, UserDefaultsBacked {
     case auto
     case twelveHour = "12h"
     case twentyFourHour = "24h"
 
     static let key = "timeFormat"
+    static var defaultsKey: String { key }
+    static var fallback: TimeFormatSetting { .auto }
 
-    /// The user's current choice (read live so a Settings change applies on the next render tick).
-    static var current: TimeFormatSetting {
-        UserDefaults.standard.string(forKey: key).flatMap(TimeFormatSetting.init(rawValue:)) ?? .auto
-    }
+    // `current` (the user's current choice, read live) comes from `UserDefaultsBacked`.
 
     var label: String {
         switch self {

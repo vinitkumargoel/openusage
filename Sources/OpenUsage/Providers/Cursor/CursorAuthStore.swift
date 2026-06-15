@@ -133,35 +133,18 @@ struct CursorAuthStore: Sendable {
     }
 
     private static func tokenExpiration(_ token: String) -> Date? {
-        guard let exp = jwtPayload(token)?["exp"].flatMap(ProviderParse.number) else { return nil }
+        guard let exp = ProviderParse.jwtPayload(token)?["exp"].flatMap(ProviderParse.number) else { return nil }
         return Date(timeIntervalSince1970: exp)
     }
 
     static func tokenSubject(_ token: String?) -> String? {
         guard let token,
-              let subject = jwtPayload(token)?["sub"] as? String
+              let subject = ProviderParse.jwtPayload(token)?["sub"] as? String
         else {
             return nil
         }
         let trimmed = subject.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
-    }
-
-    static func jwtPayload(_ token: String) -> [String: Any]? {
-        let parts = token.split(separator: ".")
-        guard parts.count >= 2 else { return nil }
-        var payload = String(parts[1])
-            .replacingOccurrences(of: "-", with: "+")
-            .replacingOccurrences(of: "_", with: "/")
-        while !payload.count.isMultiple(of: 4) {
-            payload.append("=")
-        }
-        guard let data = Data(base64Encoded: payload),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else {
-            return nil
-        }
-        return json
     }
 
     private static func sqlEscaped(_ value: String) -> String {

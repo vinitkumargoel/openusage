@@ -6,8 +6,8 @@ struct DevinMappedUsage: Equatable, Sendable {
 }
 
 enum DevinUsageMapper {
-    static let dayPeriodMs = 24 * 60 * 60 * 1000
-    static let weekPeriodMs = 7 * dayPeriodMs
+    static let dayPeriodMs = MetricPeriod.dayMs
+    static let weekPeriodMs = MetricPeriod.weekMs
 
     static func mapUserStatusResponse(_ response: HTTPResponse) throws -> DevinMappedUsage {
         guard let body = ProviderParse.jsonObject(response.body),
@@ -97,7 +97,7 @@ enum DevinUsageMapper {
     private static func formatDollarsFromMicros(_ value: Any?) -> String? {
         guard var micros = ProviderParse.number(value) else { return nil }
         micros = max(0, micros)
-        return String(format: "$%.2f", micros / 1_000_000)
+        return Formatters.currency(micros / 1_000_000)
     }
 
     private static func readTrimmedString(_ value: Any?) -> String? {

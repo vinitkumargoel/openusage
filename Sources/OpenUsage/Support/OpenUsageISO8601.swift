@@ -72,7 +72,18 @@ enum OpenUsageISO8601 {
         return head + frac + tz
     }
 
+    // ISO8601DateFormatter is expensive to construct and is hit on every snapshot decode and local-API
+    // encode, so the two fixed configurations are built once. `ISO8601DateFormatter` is thread-safe for
+    // parsing/formatting, and parsing here runs on the main-actor refresh path; `nonisolated(unsafe)`
+    // shares the immutable instances without per-call allocation.
+    private nonisolated(unsafe) static let fractionalFormatter = makeFormatter(fractionalSeconds: true)
+    private nonisolated(unsafe) static let plainFormatter = makeFormatter(fractionalSeconds: false)
+
     private static func formatter(fractionalSeconds: Bool) -> ISO8601DateFormatter {
+        fractionalSeconds ? fractionalFormatter : plainFormatter
+    }
+
+    private static func makeFormatter(fractionalSeconds: Bool) -> ISO8601DateFormatter {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = fractionalSeconds
             ? [.withInternetDateTime, .withFractionalSeconds]

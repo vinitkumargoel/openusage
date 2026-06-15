@@ -80,10 +80,10 @@ final class CodexProvider: ProviderRuntime {
         let response = try await fetchUsageWithRetry(accessToken: accessToken, authState: &authState)
         var mapped = try CodexUsageMapper.mapUsageResponse(response, now: now())
 
-        let since = sinceString(daysBack: 30, from: now())
+        let since = CcusageRunner.sinceString(daysBack: 30, from: now())
         let tokenUsage = await ccusageRunner.query(provider: .codex, since: since, homePath: authStore.codexHome())
         if case .success(let usage) = tokenUsage {
-            CodexUsageMapper.appendTokenUsage(usage, to: &mapped.lines, now: now())
+            CcusageSpendMapper.appendTokenUsage(usage, to: &mapped.lines, now: now())
         }
 
         return ProviderSnapshot(
@@ -130,11 +130,5 @@ final class CodexProvider: ProviderRuntime {
         authState.auth.lastRefresh = OpenUsageISO8601.string(from: now())
         try? authStore.save(authState)
         return response.accessToken
-    }
-
-    private func sinceString(daysBack: Int, from date: Date) -> String {
-        let since = Calendar.current.date(byAdding: .day, value: -daysBack, to: date) ?? date
-        let components = Calendar.current.dateComponents([.year, .month, .day], from: since)
-        return String(format: "%04d%02d%02d", components.year ?? 0, components.month ?? 0, components.day ?? 0)
     }
 }

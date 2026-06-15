@@ -6,12 +6,14 @@ import AppKit
 /// `NSApp.appearance` (an `NSPopover` follows its positioning view, the status-bar button), so
 /// `applyCurrent()` also posts `didChangeNotification` for `StatusItemController` to restyle the
 /// popover directly. The menu-bar label is unaffected (template image).
-enum AppearanceSetting: String, Hashable, Sendable, CaseIterable {
+enum AppearanceSetting: String, Hashable, Sendable, CaseIterable, UserDefaultsBacked {
     case system
     case light
     case dark
 
     static let key = "appearance"
+    static var defaultsKey: String { key }
+    static var fallback: AppearanceSetting { .system }
 
     /// Posted by `applyCurrent()` after the app-level appearance is set, so the popover owner can
     /// mirror the override onto the popover (which does not inherit `NSApp.appearance`).
@@ -35,11 +37,7 @@ enum AppearanceSetting: String, Hashable, Sendable, CaseIterable {
         }
     }
 
-    /// The stored choice (`.system` when unset).
-    static var current: AppearanceSetting {
-        UserDefaults.standard.string(forKey: key)
-            .flatMap(AppearanceSetting.init(rawValue:)) ?? .system
-    }
+    // `current` (the stored choice, `.system` when unset) comes from `UserDefaultsBacked`.
 
     /// Reads the stored choice and applies it app-wide. Call once at launch and again whenever
     /// the setting changes — app windows restyle immediately, and the notification lets the

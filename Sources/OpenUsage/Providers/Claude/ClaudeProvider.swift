@@ -61,13 +61,13 @@ final class ClaudeProvider: ProviderRuntime {
             mapped = try await fetchLiveUsage(state: &state)
         }
 
-        let since = sinceString(daysBack: 30, from: now())
+        let since = CcusageRunner.sinceString(daysBack: 30, from: now())
         let tokenUsage = await ccusageRunner.query(provider: .claude, since: since, homePath: authStore.claudeHomeOverride())
         if case .success(let usage) = tokenUsage {
-            CodexUsageMapper.appendTokenUsage(usage, to: &mapped.lines, now: now())
+            CcusageSpendMapper.appendTokenUsage(usage, to: &mapped.lines, now: now())
         }
 
-        ClaudeUsageMapper.appendNoDataIfNeeded(&mapped.lines)
+        MetricLine.appendNoDataIfNeeded(&mapped.lines)
         return ProviderSnapshot(
             providerID: provider.id,
             displayName: provider.displayName,
@@ -132,12 +132,6 @@ final class ClaudeProvider: ProviderRuntime {
         }
         try? authStore.save(state)
         return decoded.accessToken
-    }
-
-    private func sinceString(daysBack: Int, from date: Date) -> String {
-        let since = Calendar.current.date(byAdding: .day, value: -daysBack, to: date) ?? date
-        let components = Calendar.current.dateComponents([.year, .month, .day], from: since)
-        return String(format: "%04d%02d%02d", components.year ?? 0, components.month ?? 0, components.day ?? 0)
     }
 
 }

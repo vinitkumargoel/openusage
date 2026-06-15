@@ -72,7 +72,7 @@ final class CodexUsageMapperTests: XCTestCase {
             CcusageDay(date: "2026-02-01", totalTokens: 300, costUSD: 1.0)
         ])
 
-        CodexUsageMapper.appendTokenUsage(
+        CcusageSpendMapper.appendTokenUsage(
             usage,
             to: &lines,
             now: makeDate("2026-02-20T16:00:00.000Z")
@@ -81,6 +81,13 @@ final class CodexUsageMapperTests: XCTestCase {
         XCTAssertEqual(text(lines, "Today"), "$0.75 · 150 tokens")
         XCTAssertEqual(text(lines, "Yesterday"), "0 tokens")
         XCTAssertEqual(text(lines, "Last 30 Days"), "$1.75 · 450 tokens")
+    }
+
+    // Regression: dollar amounts must group thousands (e.g. "$1,200.00") consistently with the
+    // headline, which formats through `Formatters.currency`. Credit lines previously used a bare
+    // `$%.2f` that dropped the separator.
+    func testCreditsLabelGroupsThousands() {
+        XCTAssertEqual(CodexUsageMapper.creditsLabel(remaining: 30000), "$1,200.00 · 30,000 credits")
     }
 
     private func progress(_ lines: [MetricLine], _ label: String) -> (used: Double, limit: Double, resetsAt: Date?, periodDurationMs: Int?)? {

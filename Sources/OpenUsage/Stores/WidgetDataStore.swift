@@ -56,10 +56,8 @@ final class WidgetDataStore {
         self.defaults = defaults
         self.isProviderEnabled = isProviderEnabled
         self.orderedDescriptors = orderedDescriptors ?? { registry.descriptors }
-        self.meterStyle = defaults.string(forKey: Self.meterStyleKey)
-            .flatMap(WidgetDisplayMode.init(rawValue:)) ?? .remaining
-        self.resetDisplayMode = defaults.string(forKey: Self.resetDisplayModeKey)
-            .flatMap(ResetDisplayMode.init(rawValue:)) ?? .relative
+        self.meterStyle = defaults.enumValue(forKey: Self.meterStyleKey, default: .remaining)
+        self.resetDisplayMode = defaults.enumValue(forKey: Self.resetDisplayModeKey, default: .relative)
         // Stale-while-revalidate: load whatever was cached (expired included) so the menu bar and
         // dashboard show last-known values immediately at launch instead of "—"; the refresh loop
         // replaces them as soon as fresh data lands.
@@ -211,52 +209,53 @@ final class WidgetDataStore {
     }
 
     private func resolveText(_ value: String, descriptor: WidgetDescriptor) -> WidgetData? {
-        switch descriptor.sample.kind {
+        let sample = descriptor.sample
+        switch sample.kind {
         case .dollars:
-            guard let amount = Self.firstCurrencyAmount(in: value) else { return descriptor.sample }
-            return WidgetData(
-                title: descriptor.sample.title,
-                icon: descriptor.sample.icon,
-                kind: .dollars,
-                used: amount,
-                limit: descriptor.sample.limit,
-                countSuffix: descriptor.sample.countSuffix,
-                valuePrefix: descriptor.sample.valuePrefix,
-                // A raw-text descriptor shows the provider's line verbatim (the parsed amount above
-                // still feeds the menu bar's compact value).
-                valueTextOverride: descriptor.sample.preservesRawText ? value : nil,
-                subtitleOverride: descriptor.sample.subtitleOverride,
-                unboundedValueWord: descriptor.sample.unboundedValueWord,
-                infoNote: descriptor.sample.infoNote
-            )
+            guard let amount = Self.firstCurrencyAmount(in: value) else { return sample }
+            // A raw-text descriptor shows the provider's line verbatim (the parsed amount above still
+            // feeds the menu bar's compact value); otherwise the value is reformatted from `used`.
+            return textData(sample, kind: .dollars, used: amount, limit: sample.limit,
+                            valueTextOverride: sample.preservesRawText ? value : nil,
+                            unboundedValueWord: sample.unboundedValueWord)
         case .count:
-            guard let count = Self.firstNumber(in: value) else { return descriptor.sample }
-            return WidgetData(
-                title: descriptor.sample.title,
-                icon: descriptor.sample.icon,
-                kind: .count,
-                used: count,
-                limit: descriptor.sample.limit,
-                countSuffix: descriptor.sample.countSuffix,
-                valuePrefix: descriptor.sample.valuePrefix,
-                subtitleOverride: descriptor.sample.subtitleOverride,
-                unboundedValueWord: descriptor.sample.unboundedValueWord,
-                infoNote: descriptor.sample.infoNote
-            )
+            guard let count = Self.firstNumber(in: value) else { return sample }
+            return textData(sample, kind: .count, used: count, limit: sample.limit,
+                            unboundedValueWord: sample.unboundedValueWord)
         case .percent:
-            guard let percent = Self.firstNumber(in: value) else { return descriptor.sample }
-            return WidgetData(
-                title: descriptor.sample.title,
-                icon: descriptor.sample.icon,
-                kind: .percent,
-                used: percent,
-                limit: descriptor.sample.limit ?? 100,
-                countSuffix: descriptor.sample.countSuffix,
-                valuePrefix: descriptor.sample.valuePrefix,
-                subtitleOverride: descriptor.sample.subtitleOverride,
-                infoNote: descriptor.sample.infoNote
-            )
+            guard let percent = Self.firstNumber(in: value) else { return sample }
+            // Percent rows are always 0–100, so a missing sample limit defaults to a full 100 scale,
+            // and they carry no `unboundedValueWord` (they're never an unbounded balance).
+            return textData(sample, kind: .percent, used: percent, limit: sample.limit ?? 100)
         }
+    }
+
+    /// Builds the resolved `WidgetData` for a `.text` line: the metric identity and presentation come
+    /// from the descriptor's `sample`, while the parsed `used` (and the per-kind `limit`,
+    /// `valueTextOverride`, `unboundedValueWord`) come from the live value. Fields the sample uses for
+    /// real metrics but a fresh text row must not inherit (display/reset mode, reset timing, period,
+    /// limit noun, raw-text flag, no-data flag) deliberately reset to their `WidgetData` defaults.
+    private func textData(
+        _ sample: WidgetData,
+        kind: MetricKind,
+        used: Double,
+        limit: Double?,
+        valueTextOverride: String? = nil,
+        unboundedValueWord: String? = nil
+    ) -> WidgetData {
+        WidgetData(
+            title: sample.title,
+            icon: sample.icon,
+            kind: kind,
+            used: used,
+            limit: limit,
+            countSuffix: sample.countSuffix,
+            valuePrefix: sample.valuePrefix,
+            valueTextOverride: valueTextOverride,
+            subtitleOverride: sample.subtitleOverride,
+            unboundedValueWord: unboundedValueWord,
+            infoNote: sample.infoNote
+        )
     }
 
     static func firstCurrencyAmount(in value: String) -> Double? {

@@ -13,10 +13,37 @@ struct ReorderLift {
     let sourceFrame: CGRect
     let touchOffset: CGPoint
     var location: CGPoint
+
+    /// The one place a lift is built from a drag value. Every reorder site (dashboard/Customize ×
+    /// provider/metric) differs only in the `payload`; the frame lookup and touch-offset math are
+    /// identical, so they live here once. Returns `nil` when the dragged row has no recorded frame.
+    static func make(
+        id: String,
+        payload: Payload,
+        value: DragGesture.Value,
+        frames: [String: CGRect]
+    ) -> ReorderLift? {
+        guard let sourceFrame = frames[id] else { return nil }
+        return ReorderLift(
+            id: id,
+            payload: payload,
+            sourceFrame: sourceFrame,
+            touchOffset: CGPoint(
+                x: value.startLocation.x - sourceFrame.minX,
+                y: value.startLocation.y - sourceFrame.minY
+            ),
+            location: value.location
+        )
+    }
 }
 
 struct ReorderLiftPreview: View {
     let lift: ReorderLift
+
+    // The previews are deliberately the same views the live screens render (shared row/card
+    // builders); reading the density here lets the header→card spacing track the live sections too,
+    // so a lifted provider block matches its source block in every density.
+    @AppStorage(DensitySetting.key) private var density = DensitySetting.regular
 
     var body: some View {
         preview
@@ -46,72 +73,50 @@ struct ReorderLiftPreview: View {
     }
 
     private func dashboardProviderPreview(provider: Provider, plan: String?, rows: [WidgetData]) -> some View {
-        VStack(alignment: .leading, spacing: 9) {
+        // Same anatomy as the live dashboard section (`WidgetGroupedListView.section` + `container`):
+        // header over the shared metric card, at the density's header→card spacing.
+        VStack(alignment: .leading, spacing: density.headerToCardSpacing) {
             ProviderSectionHeader(provider: provider, plan: plan)
+                .padding(.horizontal, 8)
 
-            VStack(spacing: 0) {
-                ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
+            DashboardMetricCard(lifted: true) {
+                ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                     WidgetRowView(data: row)
-                    if index < rows.count - 1 {
-                        Divider().padding(.leading, 14)
-                    }
                 }
             }
-            .background(Theme.liftedCardFill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
     }
 
     private func dashboardMetricPreview(_ data: WidgetData) -> some View {
         WidgetRowView(data: data)
-            .background(Theme.liftedCardFill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(.separator, lineWidth: 0.5)
-            }
+            .liftedRowSurface()
     }
 
     private func customizeProviderPreview(provider: Provider, rows: [String]) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        // Same anatomy as the live Customize block (`CustomizeView.providerBlock`): header over the
+        // card of metric rows, at the density's header→card spacing.
+        VStack(alignment: .leading, spacing: density.headerToCardSpacing) {
             ProviderSectionHeader(provider: provider) {
                 ReorderGrip()
             }
+            .padding(.horizontal, 8)
 
             VStack(spacing: 0) {
                 ForEach(Array(rows.enumerated()), id: \.offset) { _, title in
-                    HStack(spacing: 10) {
-                        ReorderGrip()
-                        Text(title)
-                            .foregroundStyle(.primary)
-                        Spacer(minLength: 8)
-                        Capsule()
-                            .fill(.quaternary)
-                            .frame(width: 28, height: 16)
+                    CustomizeMetricRow(title: title) {
+                        CustomizeSwitchPlaceholder()
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 9)
                 }
             }
-            .background(Theme.liftedCardFill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .cardSurface(lifted: true)
         }
     }
 
     private func customizeMetricPreview(_ title: String) -> some View {
-        HStack(spacing: 10) {
-            ReorderGrip()
-            Text(title)
-                .foregroundStyle(.primary)
-            Spacer(minLength: 8)
-            Capsule()
-                .fill(.quaternary)
-                .frame(width: 28, height: 16)
+        CustomizeMetricRow(title: title) {
+            CustomizeSwitchPlaceholder()
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .background(Theme.liftedCardFill, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .strokeBorder(.separator, lineWidth: 0.5)
-        }
+        .liftedRowSurface()
     }
 
 }

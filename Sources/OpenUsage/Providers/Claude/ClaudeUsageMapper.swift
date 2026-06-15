@@ -6,8 +6,8 @@ struct ClaudeMappedUsage: Equatable, Sendable {
 }
 
 enum ClaudeUsageMapper {
-    static let sessionPeriodMs = 5 * 60 * 60 * 1000
-    static let weeklyPeriodMs = 7 * 24 * 60 * 60 * 1000
+    static let sessionPeriodMs = MetricPeriod.sessionMs
+    static let weeklyPeriodMs = MetricPeriod.weekMs
 
     static func mapUsageResponse(_ response: HTTPResponse, credentials: ClaudeOAuth, now: Date = Date()) throws -> ClaudeMappedUsage {
         guard (200..<300).contains(response.statusCode) else {
@@ -46,12 +46,6 @@ enum ClaudeUsageMapper {
         )
     }
 
-    static func appendNoDataIfNeeded(_ lines: inout [MetricLine]) {
-        if lines.isEmpty {
-            lines.append(.badge(label: "Status", text: "No usage data", colorHex: "#A3A3A3"))
-        }
-    }
-
     static func parseRetryAfterSeconds(_ response: HTTPResponse, now: Date = Date()) -> Int? {
         guard let raw = response.header("retry-after")?.trimmingCharacters(in: .whitespacesAndNewlines),
               !raw.isEmpty
@@ -73,10 +67,7 @@ enum ClaudeUsageMapper {
         else {
             return nil
         }
-        let base = raw
-            .split(separator: " ")
-            .map { $0.prefix(1).uppercased() + $0.dropFirst().lowercased() }
-            .joined(separator: " ")
+        let base = raw.titleCased(separator: { $0 == " " }, lowercasingTail: true)
 
         guard let tier = rateLimitTier,
               let match = tier.range(of: #"\d+x"#, options: .regularExpression)
@@ -119,7 +110,7 @@ enum ClaudeUsageMapper {
                 format: .dollars
             ))
         } else if used > 0 {
-            lines.append(.text(label: "Extra usage spent", value: String(format: "$%.2f", used)))
+            lines.append(.text(label: "Extra usage spent", value: Formatters.currency(used)))
         }
     }
 

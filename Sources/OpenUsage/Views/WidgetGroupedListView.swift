@@ -63,38 +63,50 @@ struct WidgetGroupedListView: View {
         }
     }
 
+    /// A row's placed widget paired with its resolved descriptor + data, so each `dataStore.data(for:)`
+    /// is computed once per render and reused by both the condensing rule and the row. Keyed off the
+    /// `PlacedWidget` so `ForEach` identity stays exactly what it was before this was precomputed.
+    private struct ResolvedRow: Identifiable {
+        let widget: PlacedWidget
+        let descriptor: WidgetDescriptor
+        let data: WidgetData
+        var id: PlacedWidget.ID { widget.id }
+    }
+
     private func container(_ group: ProviderGroup) -> some View {
-        let condensedIDs = condensedTextRowIDs(group)
-        return VStack(spacing: 0) {
-            ForEach(group.widgets) { widget in
-                if let descriptor = layout.descriptor(for: widget) {
-                    row(descriptor, in: group.provider.id, condensedTop: condensedIDs.contains(descriptor.id))
-                }
+        // Resolve each row's descriptor + data exactly once per render, then reuse it for both the
+        // neighbor-aware condensing rule and the row itself — `dataStore.data(for:)` used to be
+        // recomputed several times per row (twice per adjacent pair plus once in `row`).
+        let rows = group.widgets.compactMap { widget -> ResolvedRow? in
+            guard let descriptor = layout.descriptor(for: widget) else { return nil }
+            return ResolvedRow(widget: widget, descriptor: descriptor, data: dataStore.data(for: descriptor))
+        }
+        let condensedIDs = condensedTextRowIDs(rows)
+        // Same card builder the lifted preview uses, so the floating chip can't drift from the live card.
+        return DashboardMetricCard {
+            ForEach(rows) { entry in
+                row(entry.descriptor, data: entry.data, in: group.provider.id,
+                    condensedTop: condensedIDs.contains(entry.descriptor.id))
             }
         }
-        // The card groups a provider's metrics; rows are separated by spacing, not dividers (mirrors the
-        // original). The small gutter keeps the first/last row off the card edge regardless of row type.
-        .padding(.vertical, density.cardGutter)
-        .background(Theme.cardFill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     /// Neighbor-aware rule: IDs of text-only rows sitting directly under another text-only row.
     /// Rows can't see their neighbors, so the list computes the pairs; Compact density pulls these
     /// rows up so a run of one-liners reads as one cluster.
-    private func condensedTextRowIDs(_ group: ProviderGroup) -> Set<String> {
-        let descriptors = group.widgets.compactMap { layout.descriptor(for: $0) }
+    private func condensedTextRowIDs(_ rows: [ResolvedRow]) -> Set<String> {
         var ids = Set<String>()
-        for (previous, current) in zip(descriptors, descriptors.dropFirst())
-        where !dataStore.data(for: previous).isBounded && !dataStore.data(for: current).isBounded {
-            ids.insert(current.id)
+        for (previous, current) in zip(rows, rows.dropFirst())
+        where !previous.data.isBounded && !current.data.isBounded {
+            ids.insert(current.descriptor.id)
         }
         return ids
     }
 
-    private func row(_ descriptor: WidgetDescriptor, in providerID: String, condensedTop: Bool) -> some View {
+    private func row(_ descriptor: WidgetDescriptor, data: WidgetData, in providerID: String, condensedTop: Bool) -> some View {
         let isActive = activeMetricID == descriptor.id
         return WidgetRowView(
-            data: dataStore.data(for: descriptor),
+            data: data,
             onToggleResetDisplay: { dataStore.resetDisplayMode.toggle() },
             onToggleMeterStyle: { dataStore.meterStyle.toggle() },
             condensedTop: condensedTop
@@ -176,38 +188,28 @@ struct WidgetGroupedListView: View {
     }
 
     private func makeProviderLift(for group: ProviderGroup, value: DragGesture.Value) -> ReorderLift? {
-        guard let sourceFrame = rowFrames[group.provider.id] else { return nil }
         let rows = group.widgets.compactMap { widget -> WidgetData? in
             guard let descriptor = layout.descriptor(for: widget) else { return nil }
             return dataStore.data(for: descriptor)
         }
-        return ReorderLift(
+        return ReorderLift.make(
             id: group.provider.id,
             payload: .dashboardProvider(
                 provider: group.provider,
                 plan: dataStore.plan(for: group.provider.id),
                 rows: rows
             ),
-            sourceFrame: sourceFrame,
-            touchOffset: CGPoint(
-                x: value.startLocation.x - sourceFrame.minX,
-                y: value.startLocation.y - sourceFrame.minY
-            ),
-            location: value.location
+            value: value,
+            frames: rowFrames
         )
     }
 
     private func makeMetricLift(for descriptor: WidgetDescriptor, value: DragGesture.Value) -> ReorderLift? {
-        guard let sourceFrame = rowFrames[descriptor.id] else { return nil }
-        return ReorderLift(
+        ReorderLift.make(
             id: descriptor.id,
             payload: .dashboardMetric(data: dataStore.data(for: descriptor)),
-            sourceFrame: sourceFrame,
-            touchOffset: CGPoint(
-                x: value.startLocation.x - sourceFrame.minX,
-                y: value.startLocation.y - sourceFrame.minY
-            ),
-            location: value.location
+            value: value,
+            frames: rowFrames
         )
     }
 }

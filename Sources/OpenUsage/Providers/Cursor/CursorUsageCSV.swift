@@ -12,25 +12,35 @@ struct CursorUsageCSVRow: Sendable, Equatable {
 }
 
 enum CursorUsageCSV {
+    // Date parsing runs once per row of a potentially large export; the three fixed-format parsers are
+    // stateless after configuration, so they're built once instead of per call. DateFormatter and
+    // ISO8601DateFormatter are thread-safe for parsing; `nonisolated(unsafe)` shares the immutable
+    // instances without per-call allocation.
+    private nonisolated(unsafe) static let isoFractional: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+    private nonisolated(unsafe) static let iso: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
+    private static let plainDateTime: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return f
+    }()
+
     /// Pure parser: maps Cursor's exported CSV text into priced rows. Rows with an unparseable date or
     /// header are skipped.
     static func parse(csv: String) -> [CursorUsageCSVRow] {
-        let isoFractional: ISO8601DateFormatter = {
-            let f = ISO8601DateFormatter()
-            f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            return f
-        }()
-        let iso: ISO8601DateFormatter = {
-            let f = ISO8601DateFormatter()
-            f.formatOptions = [.withInternetDateTime]
-            return f
-        }()
-
         var rows: [CursorUsageCSVRow] = []
         CursorCSVParser.forEachRecord(in: csv) { r in
             guard let dateStr = r["Date"]?.trimmingCharacters(in: .whitespaces),
                   !dateStr.isEmpty,
-                  let date = parseDate(dateStr, iso: iso, isoFractional: isoFractional)
+                  let date = parseDate(dateStr)
             else { return }
 
             let model = (r["Model"] ?? "").trimmingCharacters(in: .whitespaces)
@@ -54,17 +64,10 @@ enum CursorUsageCSV {
         return rows
     }
 
-    private static func parseDate(
-        _ raw: String,
-        iso: ISO8601DateFormatter,
-        isoFractional: ISO8601DateFormatter
-    ) -> Date? {
+    private static func parseDate(_ raw: String) -> Date? {
         if let d = isoFractional.date(from: raw) { return d }
         if let d = iso.date(from: raw) { return d }
-        let df = DateFormatter()
-        df.locale = Locale(identifier: "en_US_POSIX")
-        df.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        return df.date(from: raw)
+        return plainDateTime.date(from: raw)
     }
 
     private static func parseIntValue(_ raw: String) -> Int {

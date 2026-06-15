@@ -34,17 +34,14 @@ struct SettingsScreen: View {
     /// `DashboardView` can fit the popover to it (`settingsScrollHeight`). Same scroller treatment
     /// as Customize: the overlay scroller stays (the scroll edge effect needs it) but is invisible.
     var body: some View {
-        ScrollView(.vertical) {
+        MeasuredScrollScreen(onMeasure: { newValue in
+            if newValue > 0 {
+                contentHeight = newValue
+                hasMeasuredContent = true
+            }
+        }) {
             content
-                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { newValue in
-                    if newValue > 0 {
-                        contentHeight = newValue
-                        hasMeasuredContent = true
-                    }
-                }
-                .invisibleOverlayScroller()
         }
-        .scrollBounceBehavior(.basedOnSize)
         .onAppear {
             // The menu-bar panel never activates the app on its own, and an inactive accessory
             // app receives no text input — the shortcut recorder field would silently ignore
@@ -63,9 +60,7 @@ struct SettingsScreen: View {
             section("Startup") {
                 row("Launch at Login") {
                     Toggle("", isOn: $launchAtLogin)
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                        .controlSize(.small)
+                        .settingsSwitchStyle()
                         .onChange(of: launchAtLogin) { _, enabled in
                             do {
                                 if enabled {
@@ -140,15 +135,11 @@ struct SettingsScreen: View {
                 section("Updates") {
                     row("Update Automatically") {
                         Toggle("", isOn: $updater.automaticallyChecksForUpdates)
-                            .labelsHidden()
-                            .toggleStyle(.switch)
-                            .controlSize(.small)
+                            .settingsSwitchStyle()
                     }
                     row("Beta Updates") {
                         Toggle("", isOn: $updater.betaChannelEnabled)
-                            .labelsHidden()
-                            .toggleStyle(.switch)
-                            .controlSize(.small)
+                            .settingsSwitchStyle()
                             .help("Receive pre-release builds before they ship to everyone")
                     }
                     // No version label here — the footer already shows it. The frame goes on the label so
@@ -185,7 +176,7 @@ struct SettingsScreen: View {
             VStack(spacing: 0) {
                 rows()
             }
-            .background(Theme.cardFill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .cardSurface()
         }
     }
 
@@ -228,9 +219,7 @@ struct SettingsScreen: View {
                 get: { container.enablement.isEnabled(provider.id) },
                 set: { container.enablement.setEnabled($0, for: provider.id) }
             ))
-            .labelsHidden()
-            .toggleStyle(.switch)
-            .controlSize(.small)
+            .settingsSwitchStyle()
         }
         .padding(.horizontal, 12)
         .padding(.vertical, density.controlRowPadding)

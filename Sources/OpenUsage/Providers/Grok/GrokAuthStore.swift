@@ -8,7 +8,6 @@ struct GrokAuthEntry: Codable, Hashable, Sendable {
     var expiresAt: String?
     var expires: String?
     var oidcClientID: String?
-    var email: String?
 
     enum CodingKeys: String, CodingKey {
         case key
@@ -18,7 +17,6 @@ struct GrokAuthEntry: Codable, Hashable, Sendable {
         case expiresAt = "expires_at"
         case expires
         case oidcClientID = "oidc_client_id"
-        case email
     }
 }
 
@@ -136,12 +134,7 @@ struct GrokAuthStore: Sendable {
     }
 
     func tokenExpiresAt(_ token: String) -> Date? {
-        let parts = token.split(separator: ".")
-        guard parts.count >= 2,
-              let data = Self.base64URLData(String(parts[1])),
-              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let exp = ProviderParse.number(object["exp"])
-        else {
+        guard let exp = ProviderParse.jwtPayload(token)?["exp"].flatMap(ProviderParse.number) else {
             return nil
         }
         return Date(timeIntervalSince1970: exp)
@@ -155,17 +148,6 @@ struct GrokAuthStore: Sendable {
     static func parseJSONObject(_ text: String) -> [String: Any]? {
         guard let data = text.data(using: .utf8) else { return nil }
         return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-    }
-
-    static func base64URLData(_ value: String) -> Data? {
-        var normalized = value
-            .replacingOccurrences(of: "-", with: "+")
-            .replacingOccurrences(of: "_", with: "/")
-        let padding = normalized.count % 4
-        if padding > 0 {
-            normalized += String(repeating: "=", count: 4 - padding)
-        }
-        return Data(base64Encoded: normalized)
     }
 
     private func entryExpiresAt(_ entry: GrokAuthEntry) -> Date? {

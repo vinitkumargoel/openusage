@@ -32,12 +32,13 @@ struct CodexUsageClient: Sendable {
         ))
 
         if response.statusCode == 400 || response.statusCode == 401 {
-            let code = ProviderParse.jsonObject(response.body)?["error"].flatMap { errorValue -> String? in
+            let errorBody = ProviderParse.jsonObject(response.body)
+            let code = errorBody?["error"].flatMap { errorValue -> String? in
                 if let error = errorValue as? [String: Any] {
                     return error["code"] as? String ?? error["error"] as? String
                 }
                 return errorValue as? String
-            } ?? ProviderParse.jsonObject(response.body)?["code"] as? String
+            } ?? errorBody?["code"] as? String
 
             switch code {
             case "refresh_token_expired":

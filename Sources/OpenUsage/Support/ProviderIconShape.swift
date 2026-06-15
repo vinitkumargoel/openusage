@@ -54,13 +54,13 @@ struct ProviderIconShape: Shape {
     }
 }
 
-/// A provider vector mark: the combined path data plus the source `viewBox` it was authored in.
+/// A provider vector mark: the combined SVG path data. `ProviderIconShape` normalizes by the path's
+/// true bounding box, so the source `viewBox` isn't needed.
 struct ProviderMark: Hashable {
     let path: String
-    let viewBox: CGRect
 }
 
-/// Loads copied provider SVGs from the bundle and extracts their path data + viewBox (cached).
+/// Loads copied provider SVGs from the bundle and extracts their path data (cached).
 @MainActor
 enum ProviderMarks {
     private static var cache: [String: ProviderMark] = [:]
@@ -77,10 +77,7 @@ enum ProviderMarks {
             missing.insert(id)
             return nil
         }
-        let mark = ProviderMark(
-            path: d,
-            viewBox: extractViewBox(text) ?? CGRect(x: 0, y: 0, width: 100, height: 100)
-        )
+        let mark = ProviderMark(path: d)
         cache[id] = mark
         return mark
     }
@@ -105,18 +102,6 @@ enum ProviderMarks {
             searchStart = end
         }
         return values.isEmpty ? nil : values.joined(separator: " ")
-    }
-
-    /// Parses `viewBox="minX minY width height"`. Falls back to `nil` when absent or malformed.
-    private static func extractViewBox(_ svg: String) -> CGRect? {
-        guard let start = svg.range(of: "viewBox=\"") else { return nil }
-        let rest = svg[start.upperBound...]
-        guard let end = rest.firstIndex(of: "\"") else { return nil }
-        let numbers = rest[..<end]
-            .split { $0 == " " || $0 == "," }
-            .compactMap { Double($0) }
-        guard numbers.count == 4, numbers[2] > 0, numbers[3] > 0 else { return nil }
-        return CGRect(x: numbers[0], y: numbers[1], width: numbers[2], height: numbers[3])
     }
 }
 

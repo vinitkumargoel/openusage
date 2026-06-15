@@ -35,7 +35,7 @@ enum CursorUsageError: Error, LocalizedError, Equatable {
 }
 
 enum CursorUsageMapper {
-    static let billingPeriodMs = 30 * 24 * 60 * 60 * 1000
+    static let billingPeriodMs = MetricPeriod.monthMs
 
     static func mapUsage(
         usage: [String: Any],
@@ -88,7 +88,7 @@ enum CursorUsageMapper {
                 periodDurationMs: cycle.periodDurationMs
             ))
             if let bonusSpendCents = ProviderParse.number(planUsage["bonusSpend"]), bonusSpendCents > 0 {
-                lines.append(.text(label: "Bonus spend", value: String(format: "$%.2f", ProviderParse.centsToDollars(bonusSpendCents))))
+                lines.append(.text(label: "Bonus spend", value: Formatters.currency(ProviderParse.centsToDollars(bonusSpendCents))))
             }
         } else {
             lines.append(.progress(
@@ -237,7 +237,7 @@ enum CursorUsageMapper {
     /// Sum dollars then snap to integer cents once (avoiding per-row rounding loss and final float
     /// drift), and always format with a "$" so `WidgetDataStore.firstCurrencyAmount` parses it.
     private static func spendDollars(_ dollars: Double) -> String {
-        String(format: "$%.2f", Double(CursorPricing.toCents(dollars)) / 100)
+        Formatters.currency(Double(CursorPricing.toCents(dollars)) / 100)
     }
 
     static func stripeBalanceCents(from response: HTTPResponse?) -> Double {
@@ -287,9 +287,6 @@ enum CursorUsageMapper {
         guard let value else { return nil }
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
-        return trimmed
-            .split(whereSeparator: \.isWhitespace)
-            .map { word in word.prefix(1).uppercased() + word.dropFirst() }
-            .joined(separator: " ")
+        return trimmed.titleCased(separator: \.isWhitespace)
     }
 }

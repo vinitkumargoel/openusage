@@ -80,7 +80,7 @@ struct ClaudeAuthStore: Sendable {
 
     func loadCredentials() -> ClaudeCredentialState? {
         let envAccessToken = envText("CLAUDE_CODE_OAUTH_TOKEN")
-        let stored = loadStoredCredentials(suppressMissingWarn: envAccessToken != nil)
+        let stored = loadStoredCredentials()
         guard let envAccessToken else {
             return stored
         }
@@ -175,31 +175,10 @@ struct ClaudeAuthStore: Sendable {
     }
 
     static func parseCredentials(_ text: String) -> ClaudeCredentialsFile? {
-        if let parsed = decodeCredentials(text) {
-            return parsed
-        }
-
-        var hex = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if hex.hasPrefix("0x") || hex.hasPrefix("0X") {
-            hex = String(hex.dropFirst(2))
-        }
-        guard !hex.isEmpty, hex.count.isMultiple(of: 2), hex.allSatisfy(\.isHexDigit) else {
-            return nil
-        }
-
-        var bytes: [UInt8] = []
-        var index = hex.startIndex
-        while index < hex.endIndex {
-            let next = hex.index(index, offsetBy: 2)
-            guard let byte = UInt8(hex[index..<next], radix: 16) else { return nil }
-            bytes.append(byte)
-            index = next
-        }
-        guard let decoded = String(bytes: bytes, encoding: .utf8) else { return nil }
-        return decodeCredentials(decoded)
+        ProviderParse.decodeJSONWithHexFallback(text, as: ClaudeCredentialsFile.self)
     }
 
-    private func loadStoredCredentials(suppressMissingWarn: Bool) -> ClaudeCredentialState? {
+    private func loadStoredCredentials() -> ClaudeCredentialState? {
         if let keychain = loadKeychainCredentials() { return keychain }
         if let file = loadFileCredentials() { return file }
         return nil
@@ -269,11 +248,6 @@ struct ClaudeAuthStore: Sendable {
         let normalized = value.precomposedStringWithCanonicalMapping
         let digest = SHA256.hash(data: Data(normalized.utf8))
         return digest.map { String(format: "%02x", $0) }.joined().prefix(8).description
-    }
-
-    private static func decodeCredentials(_ text: String) -> ClaudeCredentialsFile? {
-        guard let data = text.data(using: .utf8) else { return nil }
-        return try? JSONDecoder().decode(ClaudeCredentialsFile.self, from: data)
     }
 }
 

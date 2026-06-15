@@ -22,8 +22,8 @@ struct SystemProcessRunner: ProcessRunning {
     func run(
         executable: String,
         arguments: [String],
-        environment: [String: String] = [:],
-        timeout: TimeInterval = 15
+        environment: [String: String],
+        timeout: TimeInterval
     ) throws -> ProcessResult {
         let process = Process()
         if executable.hasPrefix("/") {

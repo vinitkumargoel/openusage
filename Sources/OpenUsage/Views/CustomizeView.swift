@@ -28,23 +28,17 @@ struct CustomizeView: View {
     }
 
     /// Fills the region the dashboard's pinned footer leaves; reports its content height up so
-    /// `DashboardView` can clamp the popover. The native scroll edge effect handles the bar transition.
-    ///
-    /// The scroll edge effect needs the scroll view to keep a vertical scroller, so we don't hide
-    /// indicators (that would kill the effect). `invisibleOverlayScroller()` instead keeps the overlay
-    /// scroller (which reserves no gutter) and just makes it invisible: effect intact, no visible bar.
+    /// `DashboardView` can clamp the popover. A mid-drag measurement is ignored (`!isReordering`) so
+    /// the lifted row's transient layout never reseeds the popover height.
     private var scrollContent: some View {
-        ScrollView(.vertical) {
+        MeasuredScrollScreen(onMeasure: { newValue in
+            if newValue > 0, !isReordering {
+                contentHeight = newValue
+                hasMeasuredContent = true
+            }
+        }) {
             content
-                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { newValue in
-                    if newValue > 0, !isReordering {
-                        contentHeight = newValue
-                        hasMeasuredContent = true
-                    }
-                }
-                .invisibleOverlayScroller()
         }
-        .scrollBounceBehavior(.basedOnSize)
         .onPreferenceChange(ReorderFramePreferenceKey.self) { rowFrames = $0 }
     }
 
@@ -100,34 +94,36 @@ struct CustomizeView: View {
                 metricRow(metric, in: group.provider.id, metricIDs: group.metrics.map(\.id))
             }
         }
-        .background(Theme.cardFill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .cardSurface()
     }
 
     private func metricRow(_ metric: WidgetDescriptor, in providerID: String, metricIDs: [String]) -> some View {
         let isActive = activeMetricID == metric.id
-        return HStack(spacing: 10) {
+        // Same row builder the lifted preview uses, so the floating chip can't drift from the live row.
+        return CustomizeMetricRow(
+            title: metric.title,
             // Grip + label form the drag handle; the trailing pin + toggle stay normal tappable controls.
-            HStack(spacing: 10) {
-                ReorderGrip()
-                Text(metric.title)
-                    .foregroundStyle(.primary)
-                Spacer(minLength: 8)
+            handle: { handle in
+                handle
+                    .contentShape(Rectangle())
+                    .highPriorityGesture(
+                        metricDragGesture(
+                            for: metric.id,
+                            providerID: providerID,
+                            metricIDs: metricIDs,
+                            title: metric.title
+                        )
+                    )
+            },
+            trailing: {
+                pinButton(metric)
+                Toggle("", isOn: Binding(
+                    get: { layout.isMetricEnabled(metric.id) },
+                    set: { layout.setMetricEnabled(metric.id, $0) }
+                ))
+                .settingsSwitchStyle()
             }
-            .contentShape(Rectangle())
-            .highPriorityGesture(metricDragGesture(for: metric.id, providerID: providerID, metricIDs: metricIDs))
-
-            pinButton(metric)
-
-            Toggle("", isOn: Binding(
-                get: { layout.isMetricEnabled(metric.id) },
-                set: { layout.setMetricEnabled(metric.id, $0) }
-            ))
-            .labelsHidden()
-            .toggleStyle(.switch)
-            .controlSize(.small)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, density.controlRowPadding)
+        )
         .contentShape(Rectangle())
         .opacity(isActive ? 0 : 1)
         .onHover { hovering in
@@ -190,55 +186,37 @@ struct CustomizeView: View {
         )
     }
 
-    private func metricDragGesture(for metricID: String, providerID: String, metricIDs: [String]) -> some Gesture {
+    private func metricDragGesture(for metricID: String, providerID: String, metricIDs: [String], title: String) -> some Gesture {
         reorderDragGesture(
             id: metricID,
             coordinateSpaceName: reorderSpaceName,
             rowFrames: rowFrames,
             active: $activeMetricID,
             lift: $reorderLift,
-            makeLift: { makeMetricLift(metricID: metricID, value: $0) },
+            makeLift: { makeMetricLift(metricID: metricID, title: title, value: $0) },
             orderedIDs: { metricIDs },
             reorder: { layout.reorderMetric(dragged: metricID, target: $0, in: providerID) }
         )
     }
 
     private func makeProviderLift(for group: ProviderMetrics, value: DragGesture.Value) -> ReorderLift? {
-        guard let sourceFrame = rowFrames[group.provider.id] else { return nil }
-        return ReorderLift(
+        ReorderLift.make(
             id: group.provider.id,
             payload: .customizeProvider(
                 provider: group.provider,
                 rows: group.metrics.map(\.title)
             ),
-            sourceFrame: sourceFrame,
-            touchOffset: CGPoint(
-                x: value.startLocation.x - sourceFrame.minX,
-                y: value.startLocation.y - sourceFrame.minY
-            ),
-            location: value.location
+            value: value,
+            frames: rowFrames
         )
     }
 
-    private func makeMetricLift(metricID: String, value: DragGesture.Value) -> ReorderLift? {
-        guard let sourceFrame = rowFrames[metricID],
-              let title = layout.orderedSupportedMetrics(for: sourceFrameMetricProviderID(metricID)).first(where: { $0.id == metricID })?.title
-        else { return nil }
-        return ReorderLift(
+    private func makeMetricLift(metricID: String, title: String, value: DragGesture.Value) -> ReorderLift? {
+        ReorderLift.make(
             id: metricID,
             payload: .customizeMetric(title: title),
-            sourceFrame: sourceFrame,
-            touchOffset: CGPoint(
-                x: value.startLocation.x - sourceFrame.minX,
-                y: value.startLocation.y - sourceFrame.minY
-            ),
-            location: value.location
+            value: value,
+            frames: rowFrames
         )
-    }
-
-    private func sourceFrameMetricProviderID(_ metricID: String) -> String {
-        layout.customizeGroups.first { group in
-            group.metrics.contains { $0.id == metricID }
-        }?.provider.id ?? ""
     }
 }

@@ -169,39 +169,13 @@ struct CodexAuthStore: Sendable {
     }
 
     static func parseAuth(_ text: String) -> CodexAuth? {
-        if let auth = decodeAuth(text) {
-            return auth
-        }
-
-        var hex = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if hex.hasPrefix("0x") || hex.hasPrefix("0X") {
-            hex = String(hex.dropFirst(2))
-        }
-        guard !hex.isEmpty, hex.count.isMultiple(of: 2), hex.allSatisfy(\.isHexDigit) else {
-            return nil
-        }
-
-        var bytes: [UInt8] = []
-        var index = hex.startIndex
-        while index < hex.endIndex {
-            let next = hex.index(index, offsetBy: 2)
-            guard let byte = UInt8(hex[index..<next], radix: 16) else { return nil }
-            bytes.append(byte)
-            index = next
-        }
-        guard let decoded = String(bytes: bytes, encoding: .utf8) else { return nil }
-        return decodeAuth(decoded)
+        ProviderParse.decodeJSONWithHexFallback(text, as: CodexAuth.self)
     }
 
     static func hasTokenLikeAuth(_ auth: CodexAuth) -> Bool {
         if auth.tokens?.accessToken?.isEmpty == false { return true }
         if auth.apiKey?.isEmpty == false { return true }
         return false
-    }
-
-    private static func decodeAuth(_ text: String) -> CodexAuth? {
-        guard let data = text.data(using: .utf8) else { return nil }
-        return try? JSONDecoder().decode(CodexAuth.self, from: data)
     }
 
     private func joinPath(_ base: String, _ leaf: String) -> String {

@@ -12,6 +12,8 @@ struct ProviderSnapshotCache {
     /// a relaunch without an immediate refetch and expire precisely when the next refresh is due.
     private let ttlProvider: () -> TimeInterval
     private let now: () -> Date
+    private let encoder: JSONEncoder
+    private let decoder: JSONDecoder
 
     init(
         userDefaults: UserDefaults = .standard,
@@ -23,6 +25,12 @@ struct ProviderSnapshotCache {
         self.storageKey = storageKey
         self.ttlProvider = ttlProvider ?? { RefreshSetting.interval(from: userDefaults) }
         self.now = now
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        self.encoder = encoder
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        self.decoder = decoder
     }
 
     /// Fixed-TTL convenience used by tests that want a deterministic freshness window.
@@ -79,18 +87,6 @@ struct ProviderSnapshotCache {
     private func save(_ payload: Payload) {
         guard let data = try? encoder.encode(payload) else { return }
         userDefaults.set(data, forKey: storageKey)
-    }
-
-    private var encoder: JSONEncoder {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        return encoder
-    }
-
-    private var decoder: JSONDecoder {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return decoder
     }
 }
 

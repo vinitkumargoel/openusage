@@ -204,25 +204,20 @@ struct DashboardView: View {
     }
 
     /// The widget list as a scroll view that fills the region the footer leaves. The content scrolls
-    /// under the footer; the native scroll edge effect handles the visual transition.
-    ///
-    /// The scroll edge effect needs the scroll view to keep a vertical scroller, so we don't hide
-    /// indicators (that would kill the effect). `invisibleOverlayScroller()` instead keeps the overlay
-    /// scroller (which reserves no gutter) and just makes it invisible: effect intact, no visible bar.
+    /// under the footer; the native scroll edge effect handles the visual transition. Unlike the
+    /// Customize/Settings screens it tracks the dashboard's own scroll position and adds the top
+    /// soft edge effect, so those modifiers wrap the shared measuring container here.
     private var scrollingDashboard: some View {
-        ScrollView(.vertical) {
+        MeasuredScrollScreen(onMeasure: { newValue in
+            if newValue > 0 { listContentHeight = newValue }
+        }) {
             widgetContent
                 .padding(.horizontal, Self.outerPadding)
                 .padding(.top, density.contentTopPadding)
                 .padding(.bottom, Self.contentBottomGap)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { newValue in
-                    if newValue > 0 { listContentHeight = newValue }
-                }
-                .invisibleOverlayScroller()
         }
         .scrollPosition($dashboardScrollPosition)
-        .scrollBounceBehavior(.basedOnSize)
         .scrollEdgeEffectStyle(.soft, for: .top)
     }
 

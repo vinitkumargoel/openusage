@@ -50,6 +50,13 @@ struct CcusageRunner {
         self.homeDirectory = homeDirectory
     }
 
+    /// The `--since` argument ccusage expects: `yyyyMMdd`, `daysBack` days before `date`.
+    static func sinceString(daysBack: Int, from date: Date) -> String {
+        let since = Calendar.current.date(byAdding: .day, value: -daysBack, to: date) ?? date
+        let components = Calendar.current.dateComponents([.year, .month, .day], from: since)
+        return String(format: "%04d%02d%02d", components.year ?? 0, components.month ?? 0, components.day ?? 0)
+    }
+
     func query(provider: CcusageProvider, since: String, homePath: String? = nil) async -> Result<CcusageDailyUsage, CcusageRunnerError> {
         guard let bunx = resolveBunx() else {
             return .failure(.noRunner)
@@ -198,15 +205,11 @@ struct CcusageRunner {
     }
 
     private static func readInt(_ value: Any?) -> Int? {
-        if let number = value as? NSNumber { return number.intValue }
-        if let string = value as? String { return Int(string) }
-        return nil
+        ProviderParse.number(value).map { Int($0) }
     }
 
     private static func readDouble(_ value: Any?) -> Double? {
-        if let number = value as? NSNumber { return number.doubleValue }
-        if let string = value as? String { return Double(string) }
-        return nil
+        ProviderParse.number(value)
     }
 }
 
