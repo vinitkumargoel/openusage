@@ -133,11 +133,12 @@ struct DashboardView: View {
 
     /// Cold-start estimate for Settings content, same role as the Customize estimate above. The
     /// constants mirror `SettingsScreen`: five sections (a caption header over a card) holding
-    /// nine fixed control rows plus one row per registered provider.
+    /// eleven fixed control rows (Startup 2, Appearance 4, Usage Display 2, Advanced 3) plus one
+    /// row per registered provider.
     private var estimatedSettingsContentHeight: CGFloat {
         let sectionCount: CGFloat = 5
         let sectionHeaderHeight: CGFloat = 16
-        let fixedRowCount: CGFloat = 9
+        let fixedRowCount: CGFloat = 11
         let rowCount = fixedRowCount + CGFloat(container.registry.providers.count)
         let verticalPadding: CGFloat = 24
         return verticalPadding

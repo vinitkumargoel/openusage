@@ -10,12 +10,11 @@ enum ClaudeUsageMapper {
     static let weeklyPeriodMs = MetricPeriod.weekMs
 
     static func mapUsageResponse(_ response: HTTPResponse, credentials: ClaudeOAuth, now: Date = Date()) throws -> ClaudeMappedUsage {
-        guard (200..<300).contains(response.statusCode) else {
-            if response.statusCode == 401 || response.statusCode == 403 {
-                throw ClaudeAuthError.tokenExpired
-            }
-            throw ClaudeUsageError.requestFailed(response.statusCode)
-        }
+        try ProviderAuthRetry.requireSuccess(
+            response,
+            authExpired: ClaudeAuthError.tokenExpired,
+            requestFailed: { ClaudeUsageError.requestFailed($0) }
+        )
 
         guard let body = ProviderParse.jsonObject(response.body) else {
             throw ClaudeUsageError.invalidResponse

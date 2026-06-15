@@ -142,7 +142,6 @@ final class LayoutStore {
         syncPlacedOrder(persistChanges: false)
     }
 
-    var providers: [Provider] { registry.providers }
     func provider(id: String) -> Provider? { registry.provider(id: id) }
 
     func descriptor(for widget: PlacedWidget) -> WidgetDescriptor? {

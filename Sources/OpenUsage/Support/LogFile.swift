@@ -13,17 +13,21 @@ import os
 /// rotated once before the first write. If opening/rotating fails the sink fails loudly to `os.Logger`
 /// at error and disables itself for the session — never crashes, never silently spins.
 final class LogFile: @unchecked Sendable {
-    /// Production log file: `~/Library/Logs/OpenUsage/OpenUsage.log`. Resolved via `FileManager`, never
-    /// hardcoded from `$HOME`. The `Logs/OpenUsage` subfolder is a literal (not bundle-id-keyed), so the
-    /// dev and release builds agree on the same file — acceptable since they are separate builds.
-    static let url: URL = defaultDirectory().appendingPathComponent("OpenUsage.log")
-
-    /// The shared production sink. Other code logs through `AppLog`, which writes here.
+    /// The shared production sink. Other code logs through `AppLog`, which writes here. Resolves
+    /// `~/Library/Logs/OpenUsage/OpenUsage.log` via `FileManager`, never hardcoded from `$HOME`; the
+    /// `Logs/OpenUsage` subfolder is a literal (not bundle-id-keyed), so the dev and release builds
+    /// agree on the same file — acceptable since they are separate builds.
     static let shared = LogFile(directory: defaultDirectory(), fileName: "OpenUsage.log")
+
+    /// The advertised log path (logged at startup, copied/revealed from Settings). Derived from the
+    /// shared sink so the path shown to the user always equals where logs are actually written.
+    static let url: URL = shared.fileURL
 
     static let defaultMaxBytes = 10_000_000
 
-    private let fileURL: URL
+    /// Where this sink actually writes. Exposed (read-only) so `url` can derive the advertised path
+    /// from the single source of truth rather than recomputing it.
+    let fileURL: URL
     private let archiveURL: URL
     private let directory: URL
     private let maxBytes: Int

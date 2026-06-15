@@ -17,35 +17,23 @@ struct CursorModelManifest: Decodable, Sendable {
     static let empty = CursorModelManifest(retrievedAt: "", pricing: [:], aliasRules: [])
 }
 
+/// Only the fields the spend imputation actually uses are decoded. `JSONDecoder` ignores the
+/// manifest's other keys (display name, provider/family ids, max-mode uplift, long-context
+/// multipliers) — the cost model deliberately bills at the base model rate and cannot apply
+/// max-mode or long-context adjustments from row totals (see `CursorPricing.estimatedCostDollars`).
 struct CursorModelManifestPricingEntry: Decodable, Sendable {
-    let displayName: String
-    let provider: String
-    let familyID: String
     let familyDisplayName: String
     let inputPerMillion: Double
     let cacheWritePerMillion: Double
     let cacheReadPerMillion: Double
     let outputPerMillion: Double
-    let applyMaxModeUplift: Bool
-    let longContextInputThreshold: Int?
-    let longContextInputMultiplier: Double?
-    let longContextOutputMultiplier: Double?
-    let longContextCachedInputMultiplier: Double?
 
     enum CodingKeys: String, CodingKey {
-        case displayName = "display_name"
-        case provider
-        case familyID = "family_id"
         case familyDisplayName = "family_display_name"
         case inputPerMillion = "input_per_million"
         case cacheWritePerMillion = "cache_write_per_million"
         case cacheReadPerMillion = "cache_read_per_million"
         case outputPerMillion = "output_per_million"
-        case applyMaxModeUplift = "apply_max_mode_uplift"
-        case longContextInputThreshold = "long_context_input_threshold"
-        case longContextInputMultiplier = "long_context_input_multiplier"
-        case longContextOutputMultiplier = "long_context_output_multiplier"
-        case longContextCachedInputMultiplier = "long_context_cached_input_multiplier"
     }
 }
 

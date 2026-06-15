@@ -69,12 +69,11 @@ final class CursorProvider: ProviderRuntime {
         }
 
         let usageResponse = try await fetchUsageWithRetry(accessToken: accessToken, authState: &authState)
-        guard (200..<300).contains(usageResponse.statusCode) else {
-            if usageResponse.statusCode == 401 || usageResponse.statusCode == 403 {
-                throw CursorAuthError.tokenExpired
-            }
-            throw CursorUsageError.requestFailed(usageResponse.statusCode)
-        }
+        try ProviderAuthRetry.requireSuccess(
+            usageResponse,
+            authExpired: CursorAuthError.tokenExpired,
+            requestFailed: { CursorUsageError.requestFailed($0) }
+        )
         guard let usage = ProviderParse.jsonObject(usageResponse.body) else {
             throw CursorUsageError.invalidResponse
         }

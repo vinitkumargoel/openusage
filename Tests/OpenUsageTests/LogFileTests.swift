@@ -25,6 +25,12 @@ final class LogFileTests: XCTestCase {
         )
     }
 
+    func testAdvertisedURLMatchesSharedSinkPath() {
+        // `LogFile.url` is what the app advertises (startup log, Settings copy/reveal); it must equal
+        // where the shared sink actually writes so the two can never drift to different files.
+        XCTAssertEqual(LogFile.url, LogFile.shared.fileURL)
+    }
+
     func testAppendCreatesFileAndWritesLine() throws {
         let log = LogFile(directory: tempDir, fileName: "OpenUsage.log")
         log.open()

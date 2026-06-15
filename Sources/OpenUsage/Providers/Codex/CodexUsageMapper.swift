@@ -13,12 +13,11 @@ enum CodexUsageMapper {
     static let creditUSDRate = 0.04
 
     static func mapUsageResponse(_ response: HTTPResponse, now: Date = Date()) throws -> CodexMappedUsage {
-        guard (200..<300).contains(response.statusCode) else {
-            if response.statusCode == 401 || response.statusCode == 403 {
-                throw CodexAuthError.tokenExpired
-            }
-            throw CodexUsageError.requestFailed(response.statusCode)
-        }
+        try ProviderAuthRetry.requireSuccess(
+            response,
+            authExpired: CodexAuthError.tokenExpired,
+            requestFailed: { CodexUsageError.requestFailed($0) }
+        )
 
         guard let body = ProviderParse.jsonObject(response.body) else {
             throw CodexUsageError.invalidResponse

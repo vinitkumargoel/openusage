@@ -6,12 +6,11 @@ struct GrokMappedUsage: Equatable, Sendable {
 
 enum GrokUsageMapper {
     static func mapBillingResponse(_ response: HTTPResponse) throws -> GrokMappedUsage {
-        if response.statusCode == 401 || response.statusCode == 403 {
-            throw GrokAuthError.expired
-        }
-        guard (200..<300).contains(response.statusCode) else {
-            throw GrokUsageError.requestFailed(response.statusCode)
-        }
+        try ProviderAuthRetry.requireSuccess(
+            response,
+            authExpired: GrokAuthError.expired,
+            requestFailed: { GrokUsageError.requestFailed($0) }
+        )
         guard let body = ProviderParse.jsonObject(response.body),
               let config = body["config"] as? [String: Any],
               let usedUnits = unitsValue(config["used"]),

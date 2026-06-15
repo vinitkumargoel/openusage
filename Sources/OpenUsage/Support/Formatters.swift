@@ -1,6 +1,8 @@
 import Foundation
 
-/// Small display helpers. Mock data is mostly pre-formatted; these keep currency consistent.
+/// Shared display formatters for live usage data: the mode-aware deadline/reset phrasing
+/// (`deadlineLabel`, `bareDeadline`, `resetRelativeLabel`, `resetAbsoluteLabel`), compact durations,
+/// and USD currency.
 enum Formatters {
     static func currency(_ amount: Double, fractionDigits: Int = 2) -> String {
         let f = NumberFormatter()
