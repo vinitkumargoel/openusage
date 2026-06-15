@@ -83,12 +83,17 @@ gh release view v{version} --json isDraft,isPrerelease,assets,body \
 git fetch origin gh-pages && git show origin/gh-pages:appcast.xml | grep {version}
 ```
 
-Require `isDraft=false`, `isPrerelease=true` (during the transition), an `OpenUsage-<version>.dmg` asset, `bodyLen>0`, and the version present in the appcast. If a draft was left behind, reconcile it (migrate any notes/assets the published release is missing), then delete by id:
+Require `isDraft=false`, `isPrerelease=true` (during the transition), an `OpenUsage-<version>.dmg` asset, `bodyLen>0`, and the version present in the appcast. If a draft was left behind, reconcile it (migrate any notes/assets the published release is missing), then delete it. Guard the delete so it can NEVER remove the sole release for a tag - it only runs once a separate PUBLISHED (non-draft) release for that tag already exists:
 
 ```sh
-gh api repos/robinebers/openusage/releases --paginate \
-  --jq '.[] | select(.draft and .tag_name=="v{version}") | .id' \
-  | xargs -I{} gh api -X DELETE repos/robinebers/openusage/releases/{}
+tag="v{version}"
+if [ "$(gh release view "$tag" --json isDraft --jq '.isDraft')" = "false" ]; then
+  gh api repos/robinebers/openusage/releases --paginate \
+    --jq '.[] | select(.draft and .tag_name=="'"$tag"'") | .id' \
+    | xargs -I{} gh api -X DELETE repos/robinebers/openusage/releases/{}
+else
+  echo "No published release for $tag yet - publish it first; do NOT delete the draft."
+fi
 ```
 
 ## The public flip (owner-approved only)
