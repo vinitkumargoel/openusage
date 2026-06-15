@@ -6,6 +6,21 @@ This file documents the engineering conventions for the project. Read it before 
 
 > **Repository note:** This is the native Swift edition of OpenUsage. Active development happens on the `swift` branch.
 
+## Rollout: Tauri to Swift (read first)
+
+This Swift edition is replacing the original Tauri app. Until the cutover, both editions ship from the same GitHub repo and must stay independent.
+- This (`swift`) branch is the active development line; it ships the Swift edition via `.github/workflows/release.yml` (Sparkle appcast on `gh-pages`).
+- The Tauri edition still ships from `main` via `publish.yml` and auto-updates from GitHub's "Latest" release.
+
+### Guardrails (do not break)
+- Version lanes: Swift owns `0.7.x` and up; Tauri stays on `0.6.x`. Never use a `0.6.x` number here.
+- Keep every Swift release marked as a GitHub pre-release until the owner explicitly approves the public flip. For now cut only `-beta.N` tags (Early Access) - `release.yml` marks those pre-release automatically. A plain stable Swift tag becomes GitHub "Latest" and breaks the Tauri updater. See the release-swift skill.
+- Never leave a release in Draft, and never ship blank notes: the release-swift skill generates the changelog and verifies the published release after every cut.
+- To cut the one final Tauri "goodbye" release, switch to `main` and follow its release-tauri skill. The Tauri edition is frozen and stays in the repo forever.
+
+### Phases
+(1) private Swift testing via Early Access, (2) final Tauri goodbye release from `main`, (3) flip Swift public (owner-approved; drops pre-release), (4) make `swift` the default branch and freeze the old Tauri `main` as `tauri-legacy`.
+
 ## Architecture
 
 - SwiftPM executable target; SwiftUI content hosted in an AppKit-owned `NSStatusItem` + `NSPopover`.
