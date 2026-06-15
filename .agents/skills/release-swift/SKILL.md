@@ -80,7 +80,7 @@ Always publish the notes - never leave a Swift release blank. (The live `v0.7.0-
 ```sh
 gh release view v{version} --json isDraft,isPrerelease,assets,body \
   --jq '{isDraft, isPrerelease, assets:[.assets[].name], bodyLen:(.body|length)}'
-git fetch origin gh-pages && git show origin/gh-pages:appcast.xml | grep {version}
+git fetch origin gh-pages && git show origin/gh-pages:appcast.xml | grep -F "OpenUsage-{version}.dmg"
 ```
 
 Require `isDraft=false`, `isPrerelease=true` (during the transition), an `OpenUsage-<version>.dmg` asset, `bodyLen>0`, and the version present in the appcast. If a draft was left behind, reconcile it (migrate any notes/assets the published release is missing), then delete it. Guard the delete so it can NEVER remove the sole release for a tag - it only runs once a separate PUBLISHED (non-draft) release for that tag already exists:
