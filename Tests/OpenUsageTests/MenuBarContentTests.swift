@@ -22,7 +22,6 @@ final class MenuBarContentTests: XCTestCase {
         XCTAssertEqual(content.groups[0].metrics.map(\.id), ["a.m1", "a.m2"])
         XCTAssertEqual(content.groups[0].metrics[0].label, "Session")
         XCTAssertEqual(content.groups[0].metrics[0].value, m1.sample.valueText)
-        XCTAssertEqual(content.groups[0].metrics[0].kind, .percent)
         XCTAssertEqual(content.groups[1].metrics.map(\.id), ["b.m1"])
     }
 

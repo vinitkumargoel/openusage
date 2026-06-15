@@ -13,8 +13,21 @@ import Foundation
 @MainActor
 enum ProviderAuthRetry {
     /// The statuses that mean "the token is bad" rather than "the request failed".
-    static func isAuthFailure(_ response: HTTPResponse) -> Bool {
+    nonisolated static func isAuthFailure(_ response: HTTPResponse) -> Bool {
         response.statusCode == 401 || response.statusCode == 403
+    }
+
+    /// Triage a response that should carry a usable body: a 401/403 means the token went bad (throw
+    /// `authExpired`), any other non-2xx is a request failure (throw `requestFailed(status)`), and a
+    /// 2xx returns without throwing. Centralizes the guard the Claude/Codex/Grok mappers and
+    /// `CursorProvider` each re-spelled inline, routing the auth-status check through `isAuthFailure`.
+    nonisolated static func requireSuccess(
+        _ response: HTTPResponse,
+        authExpired: Error,
+        requestFailed: (Int) -> Error
+    ) throws {
+        guard !isAuthFailure(response) else { throw authExpired }
+        guard (200..<300).contains(response.statusCode) else { throw requestFailed(response.statusCode) }
     }
 
     /// - Parameters:
