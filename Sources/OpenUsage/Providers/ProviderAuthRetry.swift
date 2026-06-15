@@ -41,6 +41,7 @@ enum ProviderAuthRetry {
         }
         guard isAuthFailure(response) else { return response }
 
+        AppLog.debug(.auth, "\(response.statusCode) -> refreshing token, retrying once")
         let refreshed = try await refreshAccessToken()
 
         let retried: HTTPResponse
@@ -49,7 +50,10 @@ enum ProviderAuthRetry {
         } catch {
             throw retriedConnectionFailed ?? connectionFailed
         }
-        if isAuthFailure(retried) { throw authExpired }
+        if isAuthFailure(retried) {
+            AppLog.warn(.auth, "retry still unauthorized -> auth expired")
+            throw authExpired
+        }
         return retried
     }
 }

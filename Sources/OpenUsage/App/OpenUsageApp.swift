@@ -22,6 +22,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let updater = UpdaterController()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Open/trim the file log, seed the cached level, and emit the startup line BEFORE anything
+        // else logs, so the first lines of a session are captured.
+        AppLog.bootstrap()
         // App-wide theme override (NSApp.appearance): the popover ignores SwiftUI's
         // preferredColorScheme, so the override is applied at the AppKit level once at launch;
         // the Theme picker on the Settings screen re-applies it on change.

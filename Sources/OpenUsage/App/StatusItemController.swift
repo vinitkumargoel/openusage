@@ -1,6 +1,5 @@
 import AppKit
 import KeyboardShortcuts
-import os
 import SwiftUI
 
 /// Owns the menu-bar status item and the popover that shows the dashboard.
@@ -13,8 +12,6 @@ import SwiftUI
 /// the global shortcut can call directly.
 @MainActor
 final class StatusItemController: NSObject, NSPopoverDelegate {
-    private static let logger = Logger(subsystem: "OpenUsage", category: "StatusItem")
-
     private let container: AppContainer
     private let updater: UpdaterController
     private let statusItem: NSStatusItem
@@ -72,7 +69,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
 
         // Registered once here; the controller lives for the app's whole life.
         KeyboardShortcuts.onKeyUp(for: .togglePopover) { [weak self] in
-            Self.logger.info("Global shortcut fired; toggling popover")
+            AppLog.info(.statusItem, "Global shortcut fired; toggling popover")
             self?.togglePopover()
         }
 
@@ -82,7 +79,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
             self?.closePopover()
         }
 
-        Self.logger.info("Status item ready (button: \(self.statusItem.button != nil), shortcut: \(KeyboardShortcuts.getShortcut(for: .togglePopover)?.description ?? "none", privacy: .public))")
+        AppLog.info(.statusItem, "Status item ready (button: \(self.statusItem.button != nil), shortcut: \(KeyboardShortcuts.getShortcut(for: .togglePopover)?.description ?? "none"))")
     }
 
     // MARK: - Status item image
@@ -127,7 +124,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
 
     private func showPopover() {
         guard let button = statusItem.button else {
-            Self.logger.error("Cannot show popover: status item has no button")
+            AppLog.error(.statusItem, "Cannot show popover: status item has no button")
             return
         }
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)

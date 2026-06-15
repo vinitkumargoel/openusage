@@ -72,49 +72,74 @@ final class WidgetDataStore {
     func refreshAll(force: Bool = false) async {
         // `Task {}` from MainActor context inherits the isolation (a task-group child can't capture
         // the non-Sendable store), so: fire one task per provider, then await them all.
-        let tasks = registry.providers.map(\.id)
-            .filter { isProviderEnabled($0) }
-            .map { providerID in
-                Task { await self.refresh(providerID: providerID, force: force) }
-            }
+        let providerIDs = registry.providers.map(\.id).filter { isProviderEnabled($0) }
+        let start = Date()
+        AppLog.info(.refresh, "batch start (\(providerIDs.count) providers, force=\(force))")
+        let tasks = providerIDs.map { providerID in
+            Task { await self.refresh(providerID: providerID, force: force) }
+        }
+        var outcomes: [RefreshOutcome] = []
+        outcomes.reserveCapacity(tasks.count)
         for task in tasks {
-            await task.value
+            outcomes.append(await task.value)
         }
         // Stamp the end of the pass so the footer countdown targets the next scheduled refresh
         // (this time + one refresh interval), mirroring the periodic loop that sleeps one interval
         // after each pass.
         lastRefreshAt = Date()
+        let durationMs = Int(Date().timeIntervalSince(start) * 1000)
+        // Count THIS batch's actual outcomes, not the long-lived `providerErrors` map (which persists
+        // across passes, so reading it would miscount cache hits and stale earlier failures).
+        let refreshed = outcomes.filter { $0 == .refreshed }.count
+        let failed = outcomes.filter { $0 == .failed }.count
+        let cached = outcomes.filter { $0 == .cacheHit }.count
+        AppLog.info(.refresh, "batch end (\(durationMs)ms, \(refreshed) ok / \(failed) failed / \(cached) cached)")
     }
 
-    func refresh(providerID: String, force: Bool = false) async {
-        guard isProviderEnabled(providerID) else { return }
+    /// What a single provider's refresh actually did this pass, so `refreshAll` can summarize the batch
+    /// from real outcomes rather than cumulative error state.
+    enum RefreshOutcome: Sendable { case refreshed, failed, cacheHit, skipped }
+
+    @discardableResult
+    func refresh(providerID: String, force: Bool = false) async -> RefreshOutcome {
+        guard isProviderEnabled(providerID) else { return .skipped }
         if !force, let cached = cache.snapshot(providerID: providerID) {
             // Skip the no-op write: `@Observable` doesn't compare values, so unconditionally
             // re-assigning an unchanged snapshot would re-render the menu-bar label every pass.
+            AppLog.debug(.refresh, "cache hit \(providerID)")
             if snapshots[providerID] != cached {
                 snapshots[providerID] = cached
             }
-            return
+            return .cacheHit
         }
+        if !force { AppLog.debug(.refresh, "cache miss \(providerID)") }
 
-        guard let provider = providersByID[providerID] else { return }
+        guard let provider = providersByID[providerID] else { return .skipped }
         // Skip if an in-flight refresh already owns this provider (e.g. the background timer racing the
         // first popover open), so we never fire duplicate network calls for the same provider.
-        guard !refreshingProviderIDs.contains(providerID) else { return }
+        guard !refreshingProviderIDs.contains(providerID) else {
+            AppLog.debug(.refresh, "cache skip \(providerID) (already in flight)")
+            return .skipped
+        }
         refreshingProviderIDs.insert(providerID)
+        defer { refreshingProviderIDs.remove(providerID) }
+        let start = Date()
         let snapshot = await provider.refresh()
+        let durationMs = Int(Date().timeIntervalSince(start) * 1000)
         if let message = Self.errorMessage(in: snapshot) {
             // Failed refresh: surface the error but keep the last good snapshot on screen rather than
-            // collapsing every row to "No data".
+            // collapsing every row to "No data". The provider error string is already user-safe.
             providerErrors[providerID] = message
-        } else {
-            if providerErrors[providerID] != nil {
-                providerErrors[providerID] = nil
-            }
-            snapshots[providerID] = snapshot
-            cache.store(snapshot)
+            AppLog.warn(.refresh, "\(providerID) failed: \(message)")
+            return .failed
         }
-        refreshingProviderIDs.remove(providerID)
+        if providerErrors[providerID] != nil {
+            providerErrors[providerID] = nil
+        }
+        snapshots[providerID] = snapshot
+        cache.store(snapshot)
+        AppLog.info(.refresh, "\(providerID) ok (\(durationMs)ms)")
+        return .refreshed
     }
 
     /// The provider's latest refresh error, or `nil` when its last refresh succeeded.

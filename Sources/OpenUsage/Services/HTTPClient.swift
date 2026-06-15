@@ -22,6 +22,12 @@ protocol HTTPClient: Sendable {
     func send(_ request: HTTPRequest) async throws -> HTTPResponse
 }
 
+// NOTE: headers and successful-response bodies are NEVER logged — `Authorization`, `Cookie`, `Bearer`
+// headers and token-bearing bodies would leak. The Debug line carries the method, the redacted URL, and
+// the status code. On an HTTP error (>= 400) a redacted, truncated (<= 500 byte) preview of the body is
+// added at Debug to aid diagnosis — never the full body, and always run through `LogRedaction.bodyPreview`
+// first (which strips JWTs, api keys, and sensitive JSON values exactly like the Tauri host API did).
+
 struct URLSessionHTTPClient: HTTPClient {
     /// One session for every provider request, built once with the optional `~/.openusage/config.json`
     /// proxy applied (see `ProxyConfig`). Default configuration — same cookie/cache semantics as
@@ -30,6 +36,9 @@ struct URLSessionHTTPClient: HTTPClient {
         let configuration = URLSessionConfiguration.default
         if let proxy = ProxyConfig.current {
             configuration.proxyConfigurations = [proxy.proxyConfiguration()]
+            // Record that a proxy is in effect (useful in a support log). Scheme/host/port only —
+            // any embedded `user:pass` lives in separate fields and is never logged.
+            AppLog.info(.config, "proxy enabled \(proxy.scheme.rawValue)://\(proxy.host):\(proxy.port)")
         }
         return URLSession(configuration: configuration)
     }()
@@ -52,6 +61,12 @@ struct URLSessionHTTPClient: HTTPClient {
             headers[String(describing: key).lowercased()] = String(describing: value)
         }
 
+        let line = "\(request.method) \(LogRedaction.redactURL(request.url.absoluteString)) -> \(http.statusCode)"
+        if http.statusCode >= 400 {
+            AppLog.debug(.http, "\(line) body: \(LogRedaction.bodyPreview(String(decoding: data, as: UTF8.self)))")
+        } else {
+            AppLog.debug(.http, line)
+        }
         return HTTPResponse(statusCode: http.statusCode, headers: headers, body: data)
     }
 }
