@@ -116,6 +116,17 @@ struct ClaudeAuthStore: Sendable {
         case .environment:
             return
         }
+        // NEVER log the credential blob/tokens — only that a rotation was persisted, and to where.
+        AppLog.debug(LogTag.auth("claude"), "persisted rotated credentials (source=\(sourceLabel(state.source)))")
+    }
+
+    private func sourceLabel(_ source: ClaudeCredentialState.Source) -> String {
+        switch source {
+        case .file: "file"
+        case .keychainCurrentUser: "keychainCurrentUser"
+        case .keychainLegacy: "keychainLegacy"
+        case .environment: "environment"
+        }
     }
 
     func canFetchLiveUsage(_ state: ClaudeCredentialState) -> Bool {
@@ -198,11 +209,13 @@ struct ClaudeAuthStore: Sendable {
     }
 
     private func loadKeychainCredentials() -> ClaudeCredentialState? {
+        // The service name is safe to log; NEVER log the returned credential blob / OAuth tokens.
         for service in keychainServiceCandidates() {
             if let value = try? keychain.readGenericPasswordForCurrentUser(service: service),
                let parsed = Self.parseCredentials(value),
                let oauth = parsed.claudeAiOauth,
                oauth.accessToken?.isEmpty == false {
+                AppLog.debug(.keychain, "read hit service=\(service)")
                 return ClaudeCredentialState(
                     oauth: oauth,
                     source: .keychainCurrentUser(service: service),
@@ -215,6 +228,7 @@ struct ClaudeAuthStore: Sendable {
                let parsed = Self.parseCredentials(value),
                let oauth = parsed.claudeAiOauth,
                oauth.accessToken?.isEmpty == false {
+                AppLog.debug(.keychain, "read hit service=\(service)")
                 return ClaudeCredentialState(
                     oauth: oauth,
                     source: .keychainLegacy(service: service),
@@ -222,6 +236,7 @@ struct ClaudeAuthStore: Sendable {
                     inferenceOnly: false
                 )
             }
+            AppLog.debug(.keychain, "read miss service=\(service)")
         }
         return nil
     }

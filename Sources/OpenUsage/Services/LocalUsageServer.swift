@@ -1,6 +1,5 @@
 import Foundation
 import Network
-import os
 
 /// Loopback-only HTTP/1.1 listener for the read-only usage API on `127.0.0.1:6736`. Starts with
 /// the app; when the port is already taken the feature is silently disabled for the session
@@ -11,7 +10,6 @@ final class LocalUsageServer {
     static let port: UInt16 = 6736
     private static let maxConcurrentConnections = 16
     private static let headLimit = 8192
-    private nonisolated static let logger = Logger(subsystem: "OpenUsage", category: "LocalUsageAPI")
 
     private let state: @MainActor () -> LocalUsageAPI.State
     private let queue = DispatchQueue(label: "openusage.local-api")
@@ -33,14 +31,14 @@ final class LocalUsageServer {
         do {
             listener = try NWListener(using: parameters)
         } catch {
-            Self.logger.info("Local usage API disabled: \(error.localizedDescription)")
+            AppLog.info(.localAPI, "disabled: \(error.localizedDescription)")
             return
         }
 
         listener.stateUpdateHandler = { state in
             if case .failed(let error) = state {
                 // Most commonly the port is already in use — silently disable for this session.
-                Self.logger.info("Local usage API disabled: \(error.localizedDescription)")
+                AppLog.info(.localAPI, "disabled: \(error.localizedDescription)")
             }
         }
         listener.newConnectionHandler = { connection in
@@ -97,6 +95,8 @@ final class LocalUsageServer {
         let parts = requestLine.split(separator: " ")
         let method = parts.indices.contains(0) ? String(parts[0]) : ""
         let path = parts.indices.contains(1) ? String(parts[1]) : "/"
+        // Path is secret-free (the loopback API serves only normalized usage); Debug-only.
+        AppLog.debug(.localAPI, "\(method) \(path)")
         return LocalUsageAPI.respond(method: method, path: path, state: state())
     }
 

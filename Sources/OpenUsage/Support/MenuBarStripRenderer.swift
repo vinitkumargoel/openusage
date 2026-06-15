@@ -18,8 +18,10 @@ enum MenuBarStripRenderer {
     /// previously rendered instance.
     static func image(for content: MenuBarContent, style: MenuBarStyle) -> NSImage? {
         if let lastRender, lastRender.content == content, lastRender.style == style {
+            AppLog.debug(.menubar, "strip cache hit")
             return lastRender.image
         }
+        AppLog.debug(.menubar, "strip cache miss (rendering)")
         let image: NSImage?
         switch style {
         case .text: image = textImage(for: content)

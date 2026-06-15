@@ -37,11 +37,16 @@ final class ClaudeProvider: ProviderRuntime {
         guard let state = authStore.loadCredentials(),
               state.oauth.accessToken?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
         else {
+            AppLog.info(LogTag.auth("claude"), "no access token, not logged in")
             return ProviderSnapshot.error(provider: provider, message: ClaudeAuthError.notLoggedIn.localizedDescription)
         }
 
+        AppLog.info(LogTag.plugin("claude"), "refresh start")
+        let start = Date()
         do {
-            return try await probe(state: state)
+            let snapshot = try await probe(state: state)
+            AppLog.info(LogTag.plugin("claude"), "refresh end (\(Int(Date().timeIntervalSince(start) * 1000))ms)")
+            return snapshot
         } catch {
             return ProviderSnapshot.error(provider: provider, message: error.localizedDescription)
         }
@@ -101,6 +106,7 @@ final class ClaudeProvider: ProviderRuntime {
 
         // 429 can come back from either attempt; the helper hands both through unchanged.
         if response.statusCode == 429 {
+            AppLog.info(LogTag.plugin("claude"), "rate-limited")
             return ClaudeUsageMapper.rateLimitedUsage(
                 credentials: working.oauth,
                 retryAfterSeconds: ClaudeUsageMapper.parseRetryAfterSeconds(response, now: now())
@@ -110,11 +116,13 @@ final class ClaudeProvider: ProviderRuntime {
     }
 
     private func refreshAccessToken(state: inout ClaudeCredentialState, refreshToken: String) async throws -> String {
+        AppLog.info(LogTag.auth("claude"), "token refresh attempt")
         let response = try await usageClient.refreshToken(refreshToken, config: authStore.oauthConfig())
         if response.statusCode == 400 || response.statusCode == 401 {
             let body = (try? JSONSerialization.jsonObject(with: response.body)) as? [String: Any]
             let errorCode = body?["error"] as? String ?? body?["error_description"] as? String
             if errorCode == "invalid_grant" {
+                AppLog.warn(LogTag.auth("claude"), "session expired (invalid_grant)")
                 throw ClaudeAuthError.sessionExpired
             }
             throw ClaudeAuthError.tokenExpired
@@ -122,6 +130,7 @@ final class ClaudeProvider: ProviderRuntime {
         guard (200..<300).contains(response.statusCode) else {
             throw ClaudeUsageError.requestFailed(response.statusCode)
         }
+        // NEVER log decoded.accessToken / refreshToken — only the fact that a rotation happened.
         let decoded = try JSONDecoder().decode(ClaudeRefreshResponse.self, from: response.body)
         state.oauth.accessToken = decoded.accessToken
         if let refreshToken = decoded.refreshToken {
@@ -131,6 +140,7 @@ final class ClaudeProvider: ProviderRuntime {
             state.oauth.expiresAt = now().timeIntervalSince1970 * 1000 + expiresIn * 1000
         }
         try? authStore.save(state)
+        AppLog.info(LogTag.auth("claude"), "token refresh ok (rotated)")
         return decoded.accessToken
     }
 

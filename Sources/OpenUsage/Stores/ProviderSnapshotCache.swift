@@ -38,26 +38,33 @@ struct ProviderSnapshotCache {
     /// still goes through the TTL-checked `snapshot(providerID:)`.
     func loadSnapshots(providerIDs: [String]) -> [String: ProviderSnapshot] {
         let providerIDSet = Set(providerIDs)
-        return loadPayload().snapshots.filter { providerID, _ in
+        let loaded = loadPayload().snapshots.filter { providerID, _ in
             providerIDSet.contains(providerID)
         }
+        AppLog.debug(.cache, "loaded \(loaded.count) snapshots from disk")
+        return loaded
     }
 
     func snapshot(providerID: String) -> ProviderSnapshot? {
         let snapshot = loadPayload().snapshots[providerID]
-        guard let snapshot, isValid(snapshot) else { return nil }
-        return snapshot
+        guard let snapshot else { return nil }
+        // Inlined the freshness check so the staleness can be logged (age vs ttl -> fresh|stale);
+        // behavior is identical to the prior `isValid` helper.
+        let age = now().timeIntervalSince(snapshot.refreshedAt)
+        let fresh = age < ttl
+        AppLog.debug(.cache, "\(providerID) staleness \(Int(age))s vs ttl \(Int(ttl))s -> \(fresh ? "fresh" : "stale")")
+        return fresh ? snapshot : nil
     }
 
     func store(_ snapshot: ProviderSnapshot) {
-        guard !snapshot.lines.contains(where: \.isError) else { return }
+        guard !snapshot.lines.contains(where: \.isError) else {
+            AppLog.debug(.cache, "skip write \(snapshot.providerID) (error snapshot)")
+            return
+        }
+        AppLog.debug(.cache, "write \(snapshot.providerID)")
         var payload = loadPayload()
         payload.snapshots[snapshot.providerID] = snapshot
         save(payload)
-    }
-
-    private func isValid(_ snapshot: ProviderSnapshot) -> Bool {
-        now().timeIntervalSince(snapshot.refreshedAt) < ttl
     }
 
     private func loadPayload() -> Payload {
@@ -70,8 +77,13 @@ struct ProviderSnapshotCache {
     }
 
     private func save(_ payload: Payload) {
-        guard let data = try? encoder.encode(payload) else { return }
-        userDefaults.set(data, forKey: storageKey)
+        // Fail loudly: a swallowed encode error would silently drop a snapshot from the cache. No
+        // behavior change (the write is still best-effort), but the failure is now visible.
+        do {
+            let data = try encoder.encode(payload)
+            userDefaults.set(data, forKey: storageKey)
+        } catch {
+            AppLog.warn(.cache, "encode failed, snapshot not persisted: \(error.localizedDescription)")
+        }
     }
 }
-

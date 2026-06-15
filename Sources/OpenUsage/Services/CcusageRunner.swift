@@ -59,8 +59,13 @@ struct CcusageRunner {
 
     func query(provider: CcusageProvider, since: String, homePath: String? = nil) async -> Result<CcusageDailyUsage, CcusageRunnerError> {
         guard let bunx = resolveBunx() else {
+            AppLog.warn(LogTag.plugin("ccusage"), "no package runner found")
             return .failure(.noRunner)
         }
+        // The args are secret-free; the resolved bunx path may carry the user's home, so Debug-only
+        // and routed through `redactLogMessage`.
+        AppLog.info(LogTag.plugin("ccusage"), "launch bunx \(provider.rawValue) daily")
+        AppLog.debug(LogTag.plugin("ccusage"), "resolved bunx \(LogRedaction.redactLogMessage(bunx))")
 
         let args = [
             "--silent",
@@ -83,15 +88,20 @@ struct CcusageRunner {
                 timeout: Self.timeout
             )
             guard result.succeeded else {
-                return .failure(.failed(result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)))
+                let stderr = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+                AppLog.warn(LogTag.plugin("ccusage"), "failed: \(LogRedaction.redactLogMessage(stderr))")
+                return .failure(.failed(stderr))
             }
             guard let usage = Self.parseOutput(result.stdout) else {
+                AppLog.warn(LogTag.plugin("ccusage"), "invalid output")
                 return .failure(.invalidOutput)
             }
             return .success(usage)
         } catch ProcessRunnerError.timedOut {
+            AppLog.warn(LogTag.plugin("ccusage"), "timed out")
             return .failure(.timedOut)
         } catch {
+            AppLog.warn(LogTag.plugin("ccusage"), "failed: \(LogRedaction.redactLogMessage(error.localizedDescription))")
             return .failure(.failed(error.localizedDescription))
         }
     }

@@ -39,6 +39,14 @@ To read logs *after the fact* instead of live, use `log show` with a time window
 log show --last 10m --info --predicate 'process == "OpenUsage"'
 ```
 
+## Log file
+
+In addition to the unified log above, the app writes a file log to
+`~/Library/Logs/OpenUsage/OpenUsage.log` — this is what to send with a support report. It is capped at
+~10 MB with one `.1` archive. Raise the detail in **Settings -> Advanced -> Log Level** (use **Debug**
+for full detail), then grab the file with **Copy Log Path** or **Reveal in Finder** in that same
+section. See [Logging](logging.md) for the levels, subsystem tags, and the never-log-secrets guarantee.
+
 ## Tips
 
 - **A provider shows an error.** Reproduce with `logs` running, then check that provider's page in

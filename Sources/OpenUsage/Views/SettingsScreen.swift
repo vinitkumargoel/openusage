@@ -1,6 +1,5 @@
 import AppKit
 import KeyboardShortcuts
-import os
 import ServiceManagement
 import SwiftUI
 
@@ -11,8 +10,6 @@ import SwiftUI
 /// System Settings. The footer already shows the version; the release build adds an "Updates" section
 /// (auto-check, beta channel, and a full-width manual check button).
 struct SettingsScreen: View {
-    private static let logger = Logger(subsystem: "OpenUsage", category: "Settings")
-
     @Environment(AppContainer.self) private var container
     @Environment(UpdaterController.self) private var updater
     /// Reported up so `DashboardView` can fit the popover to the settings content (clamped there).
@@ -28,6 +25,9 @@ struct SettingsScreen: View {
     @AppStorage(AppearanceSetting.key) private var appearance = AppearanceSetting.system
     @AppStorage(TimeFormatSetting.key) private var timeFormat = TimeFormatSetting.auto
     @AppStorage(DensitySetting.key) private var density = DensitySetting.regular
+    @AppStorage(LogLevelSetting.key) private var logLevel = LogLevelSetting.fallback
+    /// Surfaced under the Advanced rows when copying the path or revealing the file fails.
+    @State private var logActionError: String?
 
     /// Fills the region the dashboard's pinned footer leaves; reports its content height up so
     /// `DashboardView` can fit the popover to it (`settingsScrollHeight`). Same scroller treatment
@@ -69,9 +69,7 @@ struct SettingsScreen: View {
                                 }
                                 launchAtLoginError = nil
                             } catch {
-                                Self.logger.error(
-                                    "Launch at Login \(enabled ? "register" : "unregister", privacy: .public) failed: \(error.localizedDescription, privacy: .public)"
-                                )
+                                AppLog.error(.config, "Launch at Login \(enabled ? "register" : "unregister") failed: \(error.localizedDescription)")
                                 launchAtLoginError = "macOS wouldn't update Launch at Login. Check System Settings → Login Items."
                                 launchAtLogin = SMAppService.mainApp.status == .enabled
                             }
@@ -123,6 +121,7 @@ struct SettingsScreen: View {
                     providerRow(provider)
                 }
             }
+            advancedSection
             // Visible whenever the updater is active (only the signed release build ships a feed; the
             // dev build and a bare `swift run`, with no feed, hide this).
             if updater.isActive {
@@ -151,6 +150,58 @@ struct SettingsScreen: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
+    }
+
+    // MARK: - Advanced (logging)
+
+    /// Log-level control plus copy/reveal buttons for the file log. The file lives at a fixed path
+    /// (`~/Library/Logs/OpenUsage/OpenUsage.log`); raising the level here applies live (no restart) and
+    /// persists across launches. Default Info, Debug is opt-in.
+    private var advancedSection: some View {
+        section("Advanced") {
+            row("Log Level") {
+                picker($logLevel, options: LogLevelSetting.allCases, label: \.label)
+                    .onChange(of: logLevel) {
+                        // Apply the new floor to the file sink immediately, then record the transition.
+                        AppLog.reloadLevel()
+                        AppLog.info(.config, "Log level changed to \(logLevel.rawValue)")
+                    }
+            }
+            logButton("Copy Log Path") {
+                let pasteboard = NSPasteboard.general
+                pasteboard.clearContents()
+                guard pasteboard.setString(LogFile.url.path, forType: .string) else {
+                    logActionError = "Couldn't copy the log path to the clipboard."
+                    AppLog.warn(.config, "Copy log path failed")
+                    return
+                }
+                logActionError = nil
+            }
+            logButton("Reveal in Finder") {
+                NSWorkspace.shared.activateFileViewerSelecting([LogFile.url])
+                logActionError = nil
+            }
+            if let logActionError {
+                // Same orange inline-notice idiom as the Startup section's error line.
+                Text(logActionError)
+                    .font(.caption)
+                    .foregroundStyle(Theme.notice)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    /// A full-width glass button row, matching the "Check for Updates…" idiom.
+    private func logButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title).frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.glass)
+        .controlSize(.regular)
+        .padding(.horizontal, 12)
+        .padding(.vertical, density.controlRowPadding)
     }
 
     // MARK: - Section / row scaffolding

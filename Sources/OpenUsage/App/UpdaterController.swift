@@ -2,7 +2,6 @@ import AppKit
 import Combine
 import Foundation
 import Observation
-import os
 import Sparkle
 
 /// Wraps Sparkle's standard updater so the rest of the app stays Sparkle-agnostic.
@@ -18,8 +17,6 @@ final class UpdaterController {
     /// toggle here and the Sparkle channel delegate's `allowedChannels` — so the stored default is the
     /// single source of truth rather than a cached property.
     static let betaChannelDefaultsKey = "betaUpdatesEnabled"
-
-    private static let logger = Logger(subsystem: "OpenUsage", category: "Updater")
 
     // Two delegates on purpose: SPUUpdaterDelegate is main-actor isolated in Sparkle, while
     // SPUStandardUserDriverDelegate is nonisolated. Conforming to both from one class would infer a
@@ -41,7 +38,7 @@ final class UpdaterController {
         didSet {
             UserDefaults.standard.set(betaChannelEnabled, forKey: Self.betaChannelDefaultsKey)
             controller?.updater.resetUpdateCycle()
-            Self.logger.info("Update channel set to \(self.betaChannelEnabled ? "early access" : "stable", privacy: .public)")
+            AppLog.info(.updates, "channel set to \(self.betaChannelEnabled ? "early access" : "stable")")
         }
     }
 
@@ -60,7 +57,7 @@ final class UpdaterController {
     func start() {
         guard controller == nil else { return }
         guard Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") != nil else {
-            Self.logger.notice("Updater disabled: no SUFeedURL (unbundled or dev build)")
+            AppLog.info(.updates, "disabled: no SUFeedURL (unbundled or dev build)")
             return
         }
         let controller = SPUStandardUpdaterController(
@@ -78,7 +75,7 @@ final class UpdaterController {
             .sink { [weak self] value in
                 MainActor.assumeIsolated { self?.canCheckForUpdates = value }
             }
-        Self.logger.info("Updater started (feed present)")
+        AppLog.info(.updates, "started (feed present)")
     }
 
     /// User-initiated check. Shows Sparkle's standard UI (progress, release notes, install prompt).
@@ -96,6 +93,26 @@ private final class UpdaterChannelDelegate: NSObject, SPUUpdaterDelegate {
     /// default channel regardless, so stable users are never starved of stable releases.
     func allowedChannels(for updater: SPUUpdater) -> Set<String> {
         UserDefaults.standard.bool(forKey: UpdaterController.betaChannelDefaultsKey) ? ["beta"] : []
+    }
+
+    /// Records the result of each update cycle (per the issue's "Sparkle check result + channel"
+    /// item). `SUNoUpdateError`/`SUInstallationCanceledError` are normal outcomes, not failures, so
+    /// they log at Info; a genuine error (network, download) logs at Warn. The error is
+    /// framework-sourced (no secrets) but still routed through `AppLog` for one consistent format.
+    func updater(_ updater: SPUUpdater, didFinishUpdateCycleFor updateCheck: SPUUpdateCheck, error: Error?) {
+        let channel = UserDefaults.standard.bool(forKey: UpdaterController.betaChannelDefaultsKey) ? "early access" : "stable"
+        guard let error else {
+            AppLog.info(.updates, "check finished (channel=\(channel), no error)")
+            return
+        }
+        let code = (error as NSError).code
+        if code == Int(SUError.noUpdateError.rawValue) {
+            AppLog.info(.updates, "check finished (channel=\(channel), no update available)")
+        } else if code == Int(SUError.installationCanceledError.rawValue) {
+            AppLog.info(.updates, "check finished (channel=\(channel), user canceled)")
+        } else {
+            AppLog.warn(.updates, "check/download failed: \(error.localizedDescription)")
+        }
     }
 }
 

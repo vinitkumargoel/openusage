@@ -29,6 +29,16 @@ Settings lives inside the popover — there is no separate window. Open it with 
 
 One switch per provider. Turning a provider **off** hides it everywhere (dashboard, Customize, menu bar, the collection endpoint of the [local HTTP API](local-http-api.md)) and pauses its updates. Nothing is deleted — turning it back on restores its metrics and order.
 
+## Advanced
+
+| Setting | Options | What it does |
+|---|---|---|
+| Log Level | Error / Warning / Info / Debug | How much detail the app writes to its log file. Defaults to Info and persists across launches; raise to Debug while reproducing a problem. Applies immediately. |
+| Copy Log Path | button | Copies the log file path (`~/Library/Logs/OpenUsage/OpenUsage.log`) to the clipboard. |
+| Reveal in Finder | button | Opens a Finder window with the log file selected. |
+
+See [Logging](logging.md) for the full behavior: subsystem tags, the file size cap, and the guarantee that secrets are never written.
+
 ## Version
 
 The app version shows in the popover footer.

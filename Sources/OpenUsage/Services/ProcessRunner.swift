@@ -37,6 +37,10 @@ struct SystemProcessRunner: ProcessRunning {
             process.environment = ProcessInfo.processInfo.environment.merging(environment) { _, new in new }
         }
 
+        // Debug-only, basename + arg count only: arg *values* can carry paths/identifiers, so they
+        // are never logged here.
+        AppLog.debug(.subprocess, "launch \((executable as NSString).lastPathComponent) (\(arguments.count) args)")
+
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()
         process.standardOutput = stdoutPipe
@@ -65,6 +69,7 @@ struct SystemProcessRunner: ProcessRunning {
         process.waitUntilExit()
         let stdout = String(data: stdoutPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
         let stderr = String(data: stderrPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        AppLog.debug(.subprocess, "exit \(process.terminationStatus)")
         return ProcessResult(exitCode: process.terminationStatus, stdout: stdout, stderr: stderr)
     }
 
