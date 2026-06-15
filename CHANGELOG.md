@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.7.0-beta.4
+
+### Bug Fixes
+- Show the full version, including the beta tag, in both the updater prompt and the app footer so they match by @robinebers
+
+### Chores
+- Add hero screenshot to README by @robinebers
+
+---
+
+### Changelog
+
+**Full Changelog**: [v0.7.0-beta.3...v0.7.0-beta.4](https://github.com/robinebers/openusage/compare/v0.7.0-beta.3...v0.7.0-beta.4)
+
+- [763306b](https://github.com/robinebers/openusage/commit/763306b) fix(version): show the full version (incl. -beta.N) in Sparkle and the app by @robinebers
+- [a82e8b3](https://github.com/robinebers/openusage/commit/a82e8b3) docs: add hero screenshot to README by @robinebers
+
 ## v0.7.0-beta.3
 
 ### New Features
