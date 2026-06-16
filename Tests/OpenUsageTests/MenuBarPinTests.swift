@@ -1,8 +1,8 @@
 import XCTest
 @testable import OpenUsage
 
-/// Covers the menu-bar pin model on `LayoutStore`: the ≤2-per-provider rendering cap, the global
-/// pin budget (`maxTotalPins`), denial reasons/notices, order derivation from the Customize order,
+/// Covers the menu-bar pin model on `LayoutStore`: the ≤2-per-provider rendering cap, denial
+/// reasons/notices, order derivation from the Customize order,
 /// disabled-provider handling, and persistence across relaunch.
 @MainActor
 final class MenuBarPinTests: XCTestCase {
@@ -42,35 +42,14 @@ final class MenuBarPinTests: XCTestCase {
         XCTAssertTrue(store.canPin("a.m1"))
     }
 
-    func testFourthProviderCanPinWhileBudgetHasRoom() {
-        // The old ≤3-provider rule is gone: with three providers pinned, a fourth provider can still
-        // pin as long as the global budget has slots — the lock-out that motivated the redesign.
-        let store = makeStore("fourthProvider")
-        store.setPinned(true, for: "a.m1")
-        store.setPinned(true, for: "b.m1")
-        store.setPinned(true, for: "c.m1")
-
-        XCTAssertTrue(store.canPin("d.m1"))
-        store.setPinned(true, for: "d.m1")
-        XCTAssertTrue(store.isPinned("d.m1"))
-    }
-
-    func testGlobalBudgetBlocksSeventhPin() {
-        let store = makeStore("globalBudget")
-        for id in ["a.m1", "a.m2", "b.m1", "b.m2", "c.m1", "c.m2"] {
-            store.setPinned(true, for: id)
+    func testEachProviderCanPinUpToTwo() {
+        let store = makeStore("manyProviders")
+        for provider in ["a", "b", "c", "d"] {
+            store.setPinned(true, for: "\(provider).m1")
+            store.setPinned(true, for: "\(provider).m2")
+            XCTAssertFalse(store.canPin("\(provider).m3"))
         }
-        XCTAssertEqual(store.pinnedCount, LayoutStore.maxTotalPins)
-
-        XCTAssertFalse(store.canPin("d.m1"))
-        store.setPinned(true, for: "d.m1")
-        XCTAssertFalse(store.isPinned("d.m1"))
-
-        // Freeing any slot lets the fourth provider pin.
-        store.setPinned(false, for: "c.m2")
-        XCTAssertTrue(store.canPin("d.m1"))
-        store.setPinned(true, for: "d.m1")
-        XCTAssertTrue(store.isPinned("d.m1"))
+        XCTAssertEqual(store.pinnedCount, 8)
     }
 
     func testPinDenialReasonsAndFooterNotice() {
@@ -82,22 +61,17 @@ final class MenuBarPinTests: XCTestCase {
         XCTAssertEqual(store.pinDenialReason("a.m3"), "Up to 2 pins per provider")
         XCTAssertNil(store.pinDenialReason("b.m1"))
 
-        for id in ["b.m1", "b.m2", "c.m1", "c.m2"] { store.setPinned(true, for: id) }
-        XCTAssertEqual(store.pinDenialReason("d.m1"), "All 6 pins already used")
+        XCTAssertNil(store.pinDenialReason("b.m1"))
 
         // A denied click surfaces the reason as the transient footer notice and bumps the shake
         // trigger every time, so repeat clicks re-shake even while the text is unchanged.
         XCTAssertNil(store.pinLimitNotice)
         XCTAssertEqual(store.pinNoticeShakeTrigger, 0)
-        store.notePinDenied("d.m1")
-        XCTAssertEqual(store.pinLimitNotice, "All 6 pins already used")
+        store.notePinDenied("a.m3")
+        XCTAssertEqual(store.pinLimitNotice, "Up to 2 pins per provider")
         XCTAssertEqual(store.pinNoticeShakeTrigger, 1)
-        store.notePinDenied("d.m1")
+        store.notePinDenied("a.m3")
         XCTAssertEqual(store.pinNoticeShakeTrigger, 2)
-
-        // …and an allowed pin never sets one.
-        store.setPinned(false, for: "c.m2")
-        XCTAssertNil(store.pinDenialReason("d.m1"))
     }
 
     func testUnpinFreesAProviderSlot() {

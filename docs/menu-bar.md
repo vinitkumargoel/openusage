@@ -7,9 +7,9 @@ Pin your most important metrics straight into the menu bar strip.
 Pin from any row's right-click menu, or from the pin that appears when hovering rows in Customize.
 
 - On first launch the app ships with a default set of pins (Claude Session/Weekly, Codex Session/Weekly, Cursor Auto Limits/API Usage) so the strip shows numbers right away. Change them anytime; Reset in Customize restores this set.
-- **6 pins total** across all providers, at most **2 per provider**.
-- When a pin isn't allowed, the pin button stays clickable — clicking it shakes and shows the reason in the footer (e.g. "All 6 pins already used").
-- The Customize footer shows your budget: `n of 6 pinned`.
+- At most **2 pins per provider**.
+- When a pin isn't allowed, the pin button stays clickable — clicking it shakes and shows the reason in the footer (e.g. "Up to 2 pins per provider").
+- The Customize footer shows your count: `n pinned`.
 
 ## Styles
 

@@ -350,14 +350,14 @@ struct DashboardView: View {
     }
 
     /// Leading side of the footer. Normal mode shows the app name with the live "Next update in …"
-    /// line beneath it; Customize mode shows the pin budget ("4 of 6 pinned") in the same slot.
+    /// line beneath it; Customize mode shows the pin count ("4 pinned") in the same slot.
     /// Settings keeps the normal identity — the version line doubles as the About info there.
     /// A denied pin attempt swaps either line for the reason (in orange), played with the macOS
     /// deny shake — the wrong-password idiom — on every blocked click.
     @ViewBuilder
     private var footerIdentity: some View {
         if layout.isEditing {
-            Text(layout.pinLimitNotice ?? "\(layout.pinnedCount) of \(LayoutStore.maxTotalPins) pinned")
+            Text(layout.pinLimitNotice ?? "\(layout.pinnedCount) pinned")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(layout.pinLimitNotice == nil ? AnyShapeStyle(.secondary) : Theme.notice)
                 .denyShake(trigger: layout.pinNoticeShakeTrigger)

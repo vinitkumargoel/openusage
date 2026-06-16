@@ -15,8 +15,8 @@ enum DefaultLayout {
     ]
 
     /// Metrics pinned to the menu bar on first launch, so the app shows real numbers out of the box
-    /// instead of a lone icon. Two per provider for Claude, Codex, and Cursor — the per-provider and
-    /// total pin caps (`LayoutStore.maxPinsPerProvider` / `maxTotalPins`). Filtered to the active
+    /// instead of a lone icon. Two per provider for Claude, Codex, and Cursor — the per-provider cap
+    /// (`LayoutStore.maxPinsPerProvider`). Filtered to the active
     /// registry by `LayoutStore`, like `metricIDs`.
     static let pinnedMetricIDs: [String] = [
         "claude.session", "claude.weekly",
