@@ -20,7 +20,7 @@ Each provider reads the credentials already on your machine (keychain, auth file
 
 ## Features
 
-- **Menu bar pins.** Pin up to 6 metrics; render as compact text or mini bars. The strip hides metrics with no data instead of showing placeholders.
+- **Menu bar pins.** Pin metrics to the menu bar (up to 2 per provider); render as compact text or mini bars. The strip hides metrics with no data instead of showing placeholders.
 - **Dashboard popover.** Provider-grouped meters with live reset countdowns, pace indicators, and context menus (pin, hide, used⟷left, countdown⟷exact resets, refresh).
 - **Global shortcut.** Toggle the popover from anywhere — record any combo in Settings.
 - **Customize.** Add/remove widgets, drag-reorder providers and metrics.
