@@ -59,8 +59,7 @@ final class LayoutStore {
 
     /// Descriptor ids pinned to the menu bar. Membership only — display order is derived from the
     /// provider + metric order above, so pins follow the same sequence shown in Customize. Capped via
-    /// `canPin` to one global budget of `maxTotalPins`, with at most `maxPinsPerProvider` per provider
-    /// (the strip stacks a provider's values in pairs).
+    /// `canPin` to at most `maxPinsPerProvider` per provider (the strip stacks a provider's values in pairs).
     private(set) var pinnedMetricIDs: Set<String>
 
     /// Transient explanation for a denied pin attempt (the WhatsApp-style "you can only pin N chats"
@@ -270,11 +269,9 @@ final class LayoutStore {
 
     // MARK: - Menu bar pins
 
-    /// One global pin budget: a single number the user can hold in their head ("up to 6 pins"). The
-    /// per-provider cap is a rendering constraint — the Text strip stacks a provider's values two to a
+    /// Per-provider cap is a rendering constraint — the Text strip stacks a provider's values two to a
     /// column, so a third would not fit the menu bar height.
     static let maxPinsPerProvider = 2
-    static let maxTotalPins = 6
 
     func isPinned(_ descriptorID: String) -> Bool { pinnedMetricIDs.contains(descriptorID) }
 
@@ -290,7 +287,6 @@ final class LayoutStore {
         if pinnedMetricIDs.contains(descriptorID) { return true }
         guard let providerID = registry.descriptor(id: descriptorID)?.providerID else { return false }
         if pinnedCount(forProvider: providerID) >= Self.maxPinsPerProvider { return false }
-        if pinnedCount >= Self.maxTotalPins { return false }
         return true
     }
 
@@ -302,7 +298,7 @@ final class LayoutStore {
            pinnedCount(forProvider: providerID) >= Self.maxPinsPerProvider {
             return "Up to \(Self.maxPinsPerProvider) pins per provider"
         }
-        return "All \(Self.maxTotalPins) pins already used"
+        return nil
     }
 
     /// Record a denied pin attempt so the footer can explain the cap (shown for a few seconds,
