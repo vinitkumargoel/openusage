@@ -6,10 +6,12 @@ import AppKit
 /// refresh countdown on the leading edge, and the glass Customize + Settings buttons on the
 /// trailing edge.
 ///
-/// The footer is pinned via `safeAreaBar`, so the scrolling content underlaps it and macOS's native
+/// The footer is pinned via `pinnedFooter`, so the scrolling content underlaps it and macOS's native
 /// scroll edge effect (the blur/fade as content passes under a bar) handles the bottom transition —
-/// no custom gradient mask. The popover height is clamped to a share of the hosting screen so it
-/// never overflows when many widgets are added.
+/// no custom gradient mask. On macOS 26 that's `safeAreaBar`; on macOS 15 it falls back to
+/// `safeAreaInset`, which still pins the footer but without the scroll-edge blur (content scrolls
+/// flush to it). The popover height is clamped to a share of the hosting screen so it never overflows
+/// when many widgets are added.
 struct DashboardView: View {
     @Environment(AppContainer.self) private var container
     @Environment(LayoutStore.self) private var layout
@@ -150,7 +152,7 @@ struct DashboardView: View {
     var body: some View {
         modeBody
             .frame(width: Self.popoverWidth)
-            .safeAreaBar(edge: .bottom, spacing: 0) { footerBar }
+            .pinnedFooter(spacing: 0) { footerBar }
             .frame(height: animatedPopoverHeight, alignment: .top)
             .overlay(alignment: .topLeading) {
                 if let reorderLift {
@@ -290,7 +292,8 @@ struct DashboardView: View {
     /// The widget list as a scroll view that fills the region the footer leaves. The content scrolls
     /// under the footer; the native scroll edge effect handles the visual transition. Unlike the
     /// Customize/Settings screens it tracks the dashboard's own scroll position and adds the top
-    /// soft edge effect, so those modifiers wrap the shared measuring container here.
+    /// soft edge effect (`softTopScrollEdge`, a no-op on macOS 15 where content scrolls flush to the
+    /// top), so those modifiers wrap the shared measuring container here.
     private var scrollingDashboard: some View {
         MeasuredScrollScreen(onMeasure: { newValue in
             if newValue > 0 { listContentHeight = newValue }
@@ -302,7 +305,7 @@ struct DashboardView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .scrollPosition($dashboardScrollPosition)
-        .scrollEdgeEffectStyle(.soft, for: .top)
+        .softTopScrollEdge()
     }
 
     @ViewBuilder
@@ -327,8 +330,9 @@ struct DashboardView: View {
 
     /// The single bottom footer: app identity (or the "Customize" mode label while editing) plus the
     /// live refresh countdown on the leading edge, and the glass Customize + Settings buttons on the
-    /// trailing edge. Pinned via `safeAreaBar` so the content scrolls under it with the native scroll
-    /// edge effect.
+    /// trailing edge. Pinned via `pinnedFooter` so the content scrolls under it with the native scroll
+    /// edge effect (`safeAreaBar` on macOS 26; `safeAreaInset` on macOS 15, where the footer still
+    /// pins but the scroll-edge blur is absent).
     private var footerBar: some View {
         HStack(alignment: .center, spacing: 8) {
             footerIdentity

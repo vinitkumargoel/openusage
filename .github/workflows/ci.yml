@@ -1,8 +1,13 @@
 name: CI
 
 on:
+  # The Swift edition ships from `swift`; `main` is the Tauri edition with its own workflows, so the
+  # Swift CI only triggers on `swift` pushes. PRs targeting either branch run it (swift -> main is the
+  # eventual cutover).
+  push:
+    branches: [swift]
   pull_request:
-    branches: [main]
+    branches: [main, swift]
 
 permissions:
   contents: read
@@ -10,8 +15,25 @@ permissions:
 jobs:
   check:
     name: Build and Test
-    # The package targets macOS 26 (Tahoe), so it needs the macOS 26 SDK / Swift 6.2 toolchain.
+    # The `if #available(macOS 26, *)` branches need the macOS 26 SDK / Swift 6.2 toolchain to
+    # compile, so this leg stays on macos-26 even though the deployment floor is macOS 15.
     runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Build
+        run: swift build
+
+      - name: Run tests
+        run: swift test
+
+  verify-macos15:
+    name: Verify on macOS 15
+    # The deployment floor is macOS 15 (Sequoia), so verify build + tests on a macos-15 runner.
+    # macos-15 is the closest available GitHub-hosted runner to the macOS 15 floor.
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v6
         with:

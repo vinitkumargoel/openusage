@@ -16,9 +16,10 @@ OUT="$ROOT_DIR/assets/AppIcon.prebuilt"
 
 rm -rf "$OUT"
 mkdir -p "$OUT"
+# Re-commit the regenerated assets/AppIcon.prebuilt/ after running this (the maintainer runs it on a capable Mac).
 xcrun actool "$ROOT_DIR/assets/AppIcon.icon" --compile "$OUT" \
   --app-icon AppIcon --enable-on-demand-resources NO --development-region en \
-  --target-device mac --platform macosx --minimum-deployment-target 26.0 \
+  --target-device mac --platform macosx --minimum-deployment-target 15.0 \
   --output-partial-info-plist /dev/null --output-format human-readable-text --errors --warnings
 rm -f "$OUT/partial.plist"
 

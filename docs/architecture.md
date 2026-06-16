@@ -55,6 +55,14 @@ snapshot has actually expired.
 macOS menu-bar apps live in an `NSStatusItem` and show their content in an `NSPopover`. `App/` owns that
 AppKit layer and hosts the SwiftUI views inside it, so the bulk of the UI can stay plain SwiftUI.
 
+## Platform support
+
+OpenUsage runs on macOS 15 (Sequoia) and later. It is built against the latest SDK and back-deploys:
+on macOS 26 (Tahoe) it uses the system's Liquid Glass controls, and on macOS 15 it falls back to the
+standard controls with the same behavior (the footer still pins, the buttons keep their states). Every
+one of those version checks lives in a single file — `Support/LiquidGlassFallbacks.swift` — so the views
+stay free of `#available` checks.
+
 ## Local HTTP API
 
 A small loopback server exposes the current usage as JSON on `127.0.0.1:6736` for other local tools. See

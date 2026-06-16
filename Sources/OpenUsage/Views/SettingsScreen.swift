@@ -137,10 +137,11 @@ struct SettingsScreen: View {
                     }
                     // No version label here — the footer already shows it. The frame goes on the label so
                     // the glass background stretches the full row width instead of hugging the text.
+                    // (Glass on macOS 26+, bordered fallback on macOS 15.)
                     Button { updater.checkForUpdates() } label: {
                         Text("Check for Updates…").frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.glass)
+                    .glassButtonStyle()
                     .controlSize(.regular)
                     .disabled(!updater.canCheckForUpdates)
                     .padding(.horizontal, 12)
@@ -194,11 +195,12 @@ struct SettingsScreen: View {
     }
 
     /// A full-width glass button row, matching the "Check for Updates…" idiom.
+    /// Glass on macOS 26+, bordered fallback on macOS 15.
     private func logButton(_ title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title).frame(maxWidth: .infinity)
         }
-        .buttonStyle(.glass)
+        .glassButtonStyle()
         .controlSize(.regular)
         .padding(.horizontal, 12)
         .padding(.vertical, density.controlRowPadding)

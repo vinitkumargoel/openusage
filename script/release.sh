@@ -28,7 +28,7 @@ cd "$ROOT_DIR"
 
 APP_NAME="OpenUsage"
 BUNDLE_ID="com.robinebers.openusage"
-MIN_SYSTEM_VERSION="26.0"
+MIN_SYSTEM_VERSION="15.0"
 VERSION="$OPENUSAGE_VERSION"
 # CFBundleShortVersionString carries the full version, including any pre-release suffix (e.g.
 # "0.7.0-beta.1"). This is the human-readable string Sparkle shows in its update prompt and the app
@@ -114,6 +114,7 @@ cat >"$APP_CONTENTS/Info.plist" <<PLIST
   <key>CFBundleVersion</key><string>$BUILD</string>
   <key>LSMinimumSystemVersion</key><string>$MIN_SYSTEM_VERSION</string>
   <key>CFBundleIconName</key><string>AppIcon</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>LSUIElement</key><true/>
   <key>NSPrincipalClass</key><string>NSApplication</string>
   <key>NSHighResolutionCapable</key><true/>

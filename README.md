@@ -38,7 +38,7 @@ For working on the code, see the developer docs: [architecture](docs/architectur
 
 ## Requirements
 
-- macOS 26 (Tahoe) or later
+- macOS 15 (Sequoia) or later
 - [Bun](https://bun.sh) — optional, only for the local Today / Yesterday / Last 30 Days spend tiles (runs `bunx ccusage`)
 
 ## Building
