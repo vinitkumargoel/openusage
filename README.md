@@ -39,6 +39,7 @@ For working on the code, see the developer docs: [architecture](docs/architectur
 ## Requirements
 
 - macOS 15 (Sequoia) or later
+- Universal binary — runs natively on both Apple Silicon and Intel Macs
 - [Bun](https://bun.sh) — optional, only for the local Today / Yesterday / Last 30 Days spend tiles (runs `bunx ccusage`)
 
 ## Building

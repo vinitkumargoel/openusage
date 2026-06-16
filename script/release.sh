@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Builds a distributable, Developer ID-signed, notarized OpenUsage.app and wraps it in a DMG. The DMG
-# is the only output. The appcast is produced separately by Sparkle's generate_appcast (in release.yml),
-# which signs the DMG with the EdDSA key and writes/updates appcast.xml. Runs in CI (release.yml) and
-# locally on a Mac with the same env. This script does NOT push anything to GitHub.
+# Builds a distributable, Developer ID-signed, notarized OpenUsage.app and wraps it in a DMG. The app
+# is a universal binary (arm64 + x86_64) so it runs on both Apple Silicon and Intel Macs; the DMG is the
+# only output. The appcast is produced separately by Sparkle's generate_appcast (in release.yml), which
+# signs the DMG with the EdDSA key and writes/updates appcast.xml. Runs in CI (release.yml) and locally
+# on a Mac with the same env. This script does NOT push anything to GitHub.
 #
 # Required env:
 #   CODESIGN_IDENTITY     Developer ID Application identity (name or hash)
@@ -66,9 +67,12 @@ notarize() {  # $1: artifact to submit (.zip or .dmg)
     --apple-id "$NOTARY_APPLE_ID" --password "$NOTARY_APP_PASSWORD" --team-id "$NOTARY_TEAM_ID" --wait
 }
 
-echo "==> building $APP_NAME $VERSION ($BUILD)"
-swift build -c release
-BUILD_DIR="$(swift build -c release --show-bin-path)"
+echo "==> building $APP_NAME $VERSION ($BUILD) — universal (arm64 + x86_64)"
+# Build both arch slices and let SwiftPM lipo-merge them into one universal binary. With multiple
+# --arch, --show-bin-path resolves to the merged products dir (.build/apple/Products/Release), which
+# also holds the *.bundle resources, so the staging loop below is unchanged.
+swift build -c release --arch arm64 --arch x86_64
+BUILD_DIR="$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)"
 BUILD_BINARY="$BUILD_DIR/$APP_NAME"
 [ -x "$BUILD_BINARY" ] || { echo "missing built binary: $BUILD_BINARY" >&2; exit 1; }
 
@@ -77,6 +81,10 @@ rm -rf "$APP_BUNDLE"
 mkdir -p "$APP_MACOS" "$APP_RESOURCES"
 cp "$BUILD_BINARY" "$APP_BINARY"
 chmod +x "$APP_BINARY"
+# Fail loudly if the build ever silently regresses to a single arch (e.g. a dropped --arch flag): a
+# fat binary is the whole point, and generate_appcast derives Sparkle's hardwareRequirements from it.
+lipo -archs "$APP_BINARY" | grep -q "x86_64" && lipo -archs "$APP_BINARY" | grep -q "arm64" \
+  || { echo "Expected a universal (arm64 + x86_64) binary, got: $(lipo -archs "$APP_BINARY")" >&2; exit 1; }
 shopt -s nullglob
 for bundle in "$BUILD_DIR"/*.bundle; do
   cp -R "$bundle" "$APP_RESOURCES/$(basename "$bundle")"
