@@ -52,8 +52,8 @@ body:
     id: macos
     attributes:
       label: macOS Version
-      description: OpenUsage requires macOS 26 (Tahoe) or later.
-      placeholder: "e.g. 26.1"
+      description: OpenUsage requires macOS 15 (Sequoia) or later.
+      placeholder: "e.g. 15.5"
     validations:
       required: true
   - type: dropdown

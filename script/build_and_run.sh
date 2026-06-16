@@ -21,7 +21,7 @@ CONFIG="${CONFIG:-release}"
 TARGET_NAME="OpenUsage"                 # SwiftPM target / binary name
 APP_DISPLAY="OpenUsage"                 # user-facing app name
 BUNDLE_ID="com.robinebers.openusage.dev"
-MIN_SYSTEM_VERSION="26.0"
+MIN_SYSTEM_VERSION="15.0"
 APP_VERSION="0.7.0"
 APP_BUILD="0.7.0"
 
@@ -65,7 +65,9 @@ shopt -u nullglob
 
 # Compile the Icon Composer source (assets/AppIcon.icon) into Assets.car so
 # Tahoe renders the real Liquid Glass icon. CFBundleIconName below must match
-# the .icon file stem ("AppIcon"). No .icns fallback needed: the app is 26.0+.
+# the .icon file stem ("AppIcon"). The app floor is macOS 15, so a classic .icns
+# fallback is relevant there (the release build supplies one); this dev build only
+# stages the Assets.car and runs on the maintainer's current OS.
 echo "==> compiling app icon (actool)"
 xcrun actool "$ROOT_DIR/assets/AppIcon.icon" --compile "$APP_RESOURCES" \
   --app-icon AppIcon \

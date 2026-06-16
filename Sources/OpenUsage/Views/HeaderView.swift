@@ -10,30 +10,29 @@ struct HeaderView: View {
         // Group the adjacent glass buttons so the system samples them coherently (glass cannot sample
         // other glass). The gap stays wider than the container's merge distance, so they read as two
         // distinct circles rather than blending into one pill.
-        GlassEffectContainer(spacing: 4) {
-            HStack(spacing: 12) {
-                roundButton(
-                    layout.screen == .customize ? "Done" : "Customize",
-                    systemImage: layout.screen == .customize ? "checkmark" : "slider.horizontal.3",
-                    // Prominent (accent-filled) glass marks the active screen; plain glass otherwise.
-                    prominent: layout.screen == .customize
-                ) {
-                    toggle(.customize)
-                }
-                // Plain Return (not .defaultAction, which would restyle the glass button as default).
-                .keyboardShortcut(.return, modifiers: [])
-
-                roundButton(
-                    layout.screen == .settings ? "Done" : "Settings",
-                    systemImage: layout.screen == .settings ? "checkmark" : "gearshape",
-                    prominent: layout.screen == .settings
-                ) {
-                    toggle(.settings)
-                }
-                // The system-wide Settings key equivalent, scoped to the popover being key.
-                .keyboardShortcut(",", modifiers: .command)
+        HStack(spacing: 12) {
+            roundButton(
+                layout.screen == .customize ? "Done" : "Customize",
+                systemImage: layout.screen == .customize ? "checkmark" : "slider.horizontal.3",
+                // Prominent (accent-filled) glass marks the active screen; plain glass otherwise.
+                prominent: layout.screen == .customize
+            ) {
+                toggle(.customize)
             }
+            // Plain Return (not .defaultAction, which would restyle the glass button as default).
+            .keyboardShortcut(.return, modifiers: [])
+
+            roundButton(
+                layout.screen == .settings ? "Done" : "Settings",
+                systemImage: layout.screen == .settings ? "checkmark" : "gearshape",
+                prominent: layout.screen == .settings
+            ) {
+                toggle(.settings)
+            }
+            // The system-wide Settings key equivalent, scoped to the popover being key.
+            .keyboardShortcut(",", modifiers: .command)
         }
+        .glassButtonGroup(spacing: 4)
     }
 
     private func toggle(_ screen: PopoverScreen) {
@@ -43,7 +42,8 @@ struct HeaderView: View {
     }
 
     /// A system Liquid Glass icon button (Tahoe) at the large control size — no custom icon
-    /// font or shrunken control. `buttonBorderShape(.circle)` keeps the circular shape while preserving
+    /// font or shrunken control. On macOS 15 it falls back to a bordered button (no glass).
+    /// `buttonBorderShape(.circle)` keeps the circular shape while preserving
     /// the glass highlight/shadow that `clipShape` would crop. Prominent = accent-filled glass for an
     /// active toggle state. The icon-only `Label` keeps the title for accessibility; the equal frame
     /// keeps both circles the same diameter regardless of glyph width.
@@ -57,18 +57,11 @@ struct HeaderView: View {
             .labelStyle(.iconOnly)
             .frame(width: 16, height: 16)
 
-        return Group {
-            if prominent {
-                Button(action: action) { label }
-                    .buttonStyle(.glassProminent)
-            } else {
-                Button(action: action) { label }
-                    .buttonStyle(.glass)
-            }
-        }
-        .buttonBorderShape(.circle)
-        // The popover's only two buttons: a larger control costs nothing and gives a bigger target.
-        .controlSize(.large)
-        .help(title)
+        return Button(action: action) { label }
+            .glassButtonStyle(prominent: prominent)
+            .buttonBorderShape(.circle)
+            // The popover's only two buttons: a larger control costs nothing and gives a bigger target.
+            .controlSize(.large)
+            .help(title)
     }
 }
