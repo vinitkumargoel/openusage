@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.7.0-beta.6
+
+### New Features
+- Add Reduce Transparency setting for readability ([#629](https://github.com/robinebers/openusage/pull/629)) by @robinebers
+- Drop global pin cap, keep two per provider ([#630](https://github.com/robinebers/openusage/pull/630)) by @robinebers
+
+### Bug Fixes
+- Only draw card border/frost when Reduce Transparency is on by @robinebers
+- Enlarge header provider glyph to match the menu-bar strip by @robinebers
+
+### Chores
+- Align README with per-provider pin limit by @robinebers
+
 ## v0.7.0-beta.5
 
 ### New Features
