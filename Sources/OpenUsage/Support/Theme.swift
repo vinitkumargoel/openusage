@@ -52,11 +52,13 @@ enum Theme {
     /// it passes instead of letting them bleed through a translucent fill.
     static let liftedCardFill = AnyShapeStyle(Material.regular)
 
-    /// Hairline outline on every live card. The frosted fill alone separates cards well in light
-    /// mode but barely at all in dark mode (a material lightens little over a dark background, so
-    /// card and popover end up nearly the same tone). A defined edge fixes that deterministically in
-    /// both modes — the same way macOS grouped boxes (System Settings, Control Center) read in dark
-    /// mode. `.separator` is the semantic hairline, so it tracks light/dark and Increase Contrast.
+    /// Hairline outline on live cards when Reduce Transparency is on. The frosted fill alone
+    /// separates cards well in light mode but barely at all in dark mode (a material lightens little
+    /// over a dark background, so card and popover end up nearly the same tone). A defined edge fixes
+    /// that deterministically in both modes — the same way macOS grouped boxes (System Settings,
+    /// Control Center) read in dark mode. `.separator` is the semantic hairline, so it tracks
+    /// light/dark and Increase Contrast. (Not drawn in the default glass state — see
+    /// `CardSurfaceModifier` — so the toggle-off look is unchanged.)
     static let cardBorder = AnyShapeStyle(.separator)
 
     /// The single corner radius for every metric/settings card surface and its lifted twin, so the
@@ -70,14 +72,14 @@ enum Theme {
 }
 
 extension View {
-    /// The grouped-card surface used for provider/settings cards: the card fill in the shared
-    /// rounded shape, with a hairline border on live cards so they stay distinct from the popover in
-    /// dark mode (see `Theme.cardBorder`). The live fill follows the Reduce Transparency setting —
-    /// translucent quaternary with glass on, frosted material with it off — via `CardSurfaceModifier`
-    /// (a modifier, not a plain func, so it can read the environment flag). Pass `lifted: true` for
-    /// the floating drag preview, which swaps the fill for the heavier lifted material and skips the
-    /// border (its shadow/`liftedRowSurface` hairline already detaches it). Routing every card site
-    /// through this keeps the live card and its lifted twin one shape.
+    /// The grouped-card surface used for provider/settings cards, in the shared rounded shape. The
+    /// live fill follows the Reduce Transparency setting via `CardSurfaceModifier` (a modifier, not a
+    /// plain func, so it can read the environment flag): the original translucent quaternary fill
+    /// with the toggle off, or the frosted material plus a hairline border with it on (so cards stay
+    /// distinct from the opaque popover, including dark mode). Pass `lifted: true` for the floating
+    /// drag preview, which swaps the fill for the heavier lifted material and skips the border (its
+    /// shadow/`liftedRowSurface` hairline already detaches it). Routing every card site through this
+    /// keeps the live card and its lifted twin one shape.
     func cardSurface(lifted: Bool = false) -> some View {
         modifier(CardSurfaceModifier(lifted: lifted))
     }
@@ -122,10 +124,12 @@ private struct GlassTint: ShapeStyle {
     }
 }
 
-/// Backs `cardSurface`: live cards take the frosted fill when Reduce Transparency is on and the
-/// translucent quaternary fill when it's off, plus the hairline border; the lifted drag preview
-/// always uses its own legible material and no border. A `ViewModifier` rather than a plain `View`
-/// func so it can read the environment flag.
+/// Backs `cardSurface`. With Reduce Transparency *off* (the default) live cards keep the original
+/// look exactly: the translucent quaternary fill and no border, so the toggle-off appearance is
+/// unchanged from before this setting existed. With it *on*, cards take the frosted fill plus the
+/// hairline border so they stay distinct over the now-opaque popover (the border is what carries
+/// that separation in dark mode). The lifted drag preview always uses its own legible material and
+/// no border. A `ViewModifier` rather than a plain `View` func so it can read the environment flag.
 private struct CardSurfaceModifier: ViewModifier {
     @Environment(\.reduceTransparencyEffective) private var reduceTransparency
     let lifted: Bool
@@ -134,10 +138,12 @@ private struct CardSurfaceModifier: ViewModifier {
     func body(content: Content) -> some View {
         if lifted {
             content.background(Theme.liftedCardFill, in: Theme.cardShape)
-        } else {
+        } else if reduceTransparency {
             content
-                .background(reduceTransparency ? Theme.frostedCardFill : Theme.cardFill, in: Theme.cardShape)
+                .background(Theme.frostedCardFill, in: Theme.cardShape)
                 .overlay { Theme.cardShape.strokeBorder(Theme.cardBorder, lineWidth: 0.5) }
+        } else {
+            content.background(Theme.cardFill, in: Theme.cardShape)
         }
     }
 }
