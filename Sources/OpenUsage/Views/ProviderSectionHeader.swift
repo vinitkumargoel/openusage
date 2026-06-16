@@ -51,7 +51,10 @@ struct ProviderSectionHeader<Trailing: View>: View {
                     .accessibilityLabel(warning)
             }
             Spacer(minLength: 8)
-            ProviderIcon(source: provider.icon)
+            // Match the menu-bar strip glyph: a near-zero inset lets the mark fill its box so the
+            // header logo reads at the same scale as the tray, instead of floating small inside the
+            // default list-context padding.
+            ProviderIcon(source: provider.icon, inset: 0.04)
                 .frame(width: density.headerIconSize, height: density.headerIconSize)
             trailing
         }

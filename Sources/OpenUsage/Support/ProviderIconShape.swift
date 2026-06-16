@@ -11,12 +11,16 @@ enum IconSource: Hashable {
 /// beside the mark.
 struct ProviderIcon: View {
     let source: IconSource
+    /// Margin kept around a vector provider mark, forwarded to `ProviderIconShape`. Defaults to the
+    /// breathing-room value used in list contexts (e.g. Settings); callers that want the mark to
+    /// fill its box — like the section header matching the menu-bar strip glyph — pass a smaller value.
+    var inset: CGFloat = 0.14
 
     var body: some View {
         switch source {
         case .providerMark(let id):
             if let mark = ProviderMarks.mark(for: id) {
-                ProviderIconShape(pathData: mark.path)
+                ProviderIconShape(pathData: mark.path, inset: inset)
                     .fill(Theme.iconGray)
             } else {
                 Image(systemName: ProviderMarks.symbolFallback(for: id))
