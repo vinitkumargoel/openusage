@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.7.0-beta.5
+
+### New Features
+- Build a universal binary so the app runs natively on both Apple Silicon and Intel Macs by @robinebers
+- Support macOS 15 (Sequoia) and later, not only Tahoe ([#623](https://github.com/robinebers/openusage/pull/623)) by @robinebers
+
+### Bug Fixes
+- Enlarge provider glyphs in the menu-bar Text strip ([#627](https://github.com/robinebers/openusage/pull/627)) by @robinebers
+
+### Chores
+- Drop the unworkable macos-15 CI verify leg ([#623](https://github.com/robinebers/openusage/pull/623)) by @robinebers
+
 ## v0.7.0-beta.4
 
 ### Bug Fixes
