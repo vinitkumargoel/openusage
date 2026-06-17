@@ -104,8 +104,7 @@ final class CodexUsageMapperTests: XCTestCase {
             now: Date(timeIntervalSince1970: 1_800_000_000)
         )
 
-        XCTAssertEqual(badge(mapped.lines, "Rate Limit Resets")?.text, "1 available")
-        XCTAssertEqual(badge(mapped.lines, "Rate Limit Resets")?.colorHex, "#22c55e")
+        XCTAssertEqual(text(mapped.lines, "Rate Limit Resets"), "1 available")
 
         let resetIndex = mapped.lines.firstIndex { $0.label == "Rate Limit Resets" }
         let creditsIndex = mapped.lines.firstIndex { $0.label == "Credits" }
@@ -116,7 +115,7 @@ final class CodexUsageMapperTests: XCTestCase {
         }
     }
 
-    func testShowsZeroRateLimitResetsAsMutedBadge() throws {
+    func testShowsZeroRateLimitResets() throws {
         let body = Data(#"{ "rate_limit_reset_credits": { "available_count": 0 } }"#.utf8)
         let response = HTTPResponse(statusCode: 200, headers: [:], body: body)
 
@@ -125,8 +124,7 @@ final class CodexUsageMapperTests: XCTestCase {
             now: Date(timeIntervalSince1970: 1_800_000_000)
         )
 
-        XCTAssertEqual(badge(mapped.lines, "Rate Limit Resets")?.text, "0 available")
-        XCTAssertEqual(badge(mapped.lines, "Rate Limit Resets")?.colorHex, "#a3a3a3")
+        XCTAssertEqual(text(mapped.lines, "Rate Limit Resets"), "0 available")
     }
 
     func testOmitsRateLimitResetsWhenCountMalformed() throws {
@@ -138,7 +136,7 @@ final class CodexUsageMapperTests: XCTestCase {
             now: Date(timeIntervalSince1970: 1_800_000_000)
         )
 
-        XCTAssertNil(badge(mapped.lines, "Rate Limit Resets"))
+        XCTAssertNil(text(mapped.lines, "Rate Limit Resets"))
     }
 
     private func progress(_ lines: [MetricLine], _ label: String) -> (used: Double, limit: Double, resetsAt: Date?, periodDurationMs: Int?)? {
@@ -153,13 +151,6 @@ final class CodexUsageMapperTests: XCTestCase {
             return nil
         }
         return value
-    }
-
-    private func badge(_ lines: [MetricLine], _ label: String) -> (text: String, colorHex: String?)? {
-        guard case .badge(_, let text, let colorHex, _) = lines.first(where: { $0.label == label }) else {
-            return nil
-        }
-        return (text, colorHex)
     }
 
     private func makeDate(_ value: String) -> Date {

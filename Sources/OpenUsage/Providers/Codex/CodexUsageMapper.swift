@@ -72,14 +72,12 @@ enum CodexUsageMapper {
         appendReviewLimit(from: body, to: &lines, now: now)
 
         // On-demand rate-limit reset credits ("N available"), shown before Credits — mirrors the JS
-        // plugin (PR #577). Rendered as a badge so it can also back a pinnable widget tile verbatim.
+        // plugin (PR #577). A verbatim `.text` line (backed by a `verbatimCount` widget tile) so every
+        // surface resolves from one value: the dashboard/popover read "N available" while the menu-bar
+        // tile shows the parsed count — they never diverge.
         if let resets = readResetCredits(body), resets >= 0 {
             let count = Int(resets.rounded(.down))
-            lines.append(.badge(
-                label: "Rate Limit Resets",
-                text: "\(count) available",
-                colorHex: count > 0 ? "#22c55e" : "#a3a3a3"
-            ))
+            lines.append(.text(label: "Rate Limit Resets", value: "\(count) available"))
         }
 
         if let remaining = readCreditsRemaining(response: response, body: body) {
