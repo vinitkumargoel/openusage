@@ -12,15 +12,6 @@ enum Pace {
         case ahead     // projected to finish with ≥10% of the quota to spare → calm blue
         case onTrack   // projected to land inside the last 10% — cutting it close → amber
         case behind    // projected to blow past the limit before reset → red
-
-        /// Plain-language verdict; the meter tooltip and the label-line warning copy share it.
-        var statusText: String {
-            switch self {
-            case .ahead: return "Well within limit"
-            case .onTrack: return "Close to limit"
-            case .behind: return "Will reach limit"
-            }
-        }
     }
 
     /// Classification plus the projected end-of-period usage (same unit as `used`/`limit`), mirroring the

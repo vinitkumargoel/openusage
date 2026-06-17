@@ -69,7 +69,7 @@ final class ResetDisplayTests: XCTestCase {
     /// before the reset. Evaluated against the real clock (default `now`) to match the resetsAt set
     /// from `Date()` below.
     private func runningOutEta(_ data: WidgetData) -> String? {
-        if case .runningOut(let eta) = data.meterState() { return eta }
+        if case .runningOut(let eta, _) = data.meterState() { return eta }
         return nil
     }
 

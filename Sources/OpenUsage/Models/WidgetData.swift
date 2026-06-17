@@ -77,18 +77,20 @@ struct WidgetData: Hashable {
         /// speak of. Red, flame + the bare run-out time. `eta` is `nil` at the float edge where the
         /// run-out lands essentially at the reset, and whenever the projected cushion rounds to 0%
         /// (≤ limit, so there's no run-out time) — in both cases the flame shows alone rather than a
-        /// misleading "0s" or a "~0% spare" amber bar.
-        case runningOut(eta: String?)
+        /// misleading "0s" or a "~0% spare" amber bar. `projectedFraction` (projected end-of-period
+        /// usage ÷ limit) backs the tooltip's overage / "lands at the limit" copy.
+        case runningOut(eta: String?, projectedFraction: Double)
         /// Projected to land inside the last 10% — cutting it close — but still with a cushion of at
         /// least 1%. (A cushion that rounds to 0% promotes to `runningOut` instead, so amber never
         /// shows "~0% spare".) Amber, a "~N% spare" note and a tick fencing the spare-width sliver
         /// off at the fill's edge (`tick`, already
         /// Used/Left-aware: used + spare in Used view, so the sliver sits just outside the fill;
         /// remaining − spare in Left view, so it's the last slice of the fill — see
-        /// `WidgetRowView.meter`).
-        case closeToLimit(spare: String, tick: Double)
-        /// On course to finish with ≥10% to spare. Blue, no decoration.
-        case healthy
+        /// `WidgetRowView.meter`). `projectedFraction` backs the tooltip's "% used at reset" copy.
+        case closeToLimit(spare: String, tick: Double, projectedFraction: Double)
+        /// On course to finish with ≥10% to spare. Blue, no decoration. `projectedFraction` backs the
+        /// tooltip's "% left at reset" cushion copy.
+        case healthy(projectedFraction: Double)
         /// No pace signal to project (no reset window, or <5% of it elapsed): color from the
         /// absolute level bands on the share used, no copy.
         case level(MeterSeverity)
@@ -104,15 +106,28 @@ struct WidgetData: Hashable {
             }
         }
 
-        /// Hover-tooltip verdict shared by the bar and the warning copy; `nil` where there's
-        /// nothing to add (no data, or a plain absolute-band level with no pace story).
+        /// Hover-tooltip detail shared by the bar, the spare note, and the flame: a short numeric
+        /// projection of where pace lands at reset, adding the one figure the row doesn't already
+        /// show. Blue → the projected cushion ("~35% left at reset"); amber → projected usage
+        /// ("~92% used at reset"), the complement of the visible "~N% spare"; red → the overage
+        /// ("~12% over limit at reset"), or "~100% used at reset" when projected to land right at
+        /// the limit (the promoted-onTrack case, ≤ limit, so there's no overage). `nil` where there's
+        /// no pace story (no data, or a plain absolute-band level); terminal "Limit reached" when spent.
         var tooltip: String? {
             switch self {
             case .noData, .level: return nil
             case .spent: return "Limit reached"
-            case .runningOut: return Pace.Status.behind.statusText
-            case .closeToLimit: return Pace.Status.onTrack.statusText
-            case .healthy: return Pace.Status.ahead.statusText
+            case .healthy(let projectedFraction):
+                let left = Int(((1 - projectedFraction) * 100).rounded())
+                return "~\(left)% left at reset"
+            case .closeToLimit(_, _, let projectedFraction):
+                let used = Int((projectedFraction * 100).rounded())
+                return "~\(used)% used at reset"
+            case .runningOut(_, let projectedFraction):
+                guard projectedFraction > 1 else { return "~100% used at reset" }
+                // Floored to 1% so a bar projected even slightly over never reads "~0% over limit".
+                let over = max(1, Int(((projectedFraction - 1) * 100).rounded()))
+                return "~\(over)% over limit at reset"
             }
         }
     }
@@ -272,26 +287,26 @@ extension WidgetData {
                                       periodDuration: ctx.period, now: now) {
             switch result.status {
             case .ahead:
-                return .healthy
+                return .healthy(projectedFraction: result.projectedUsage / ctx.limit)
             case .onTrack:
                 let projected = result.projectedUsage / ctx.limit
                 let spare = Int(((1 - projected) * 100).rounded())
                 // Projected to land essentially at the limit: the cushion rounds to nothing, so an
                 // amber "~0% spare" note + a zero-width tick would contradict the headline's
                 // remaining %. Promote to the red run-out state instead — there's no
-                // run-out-before-reset time (projection ≤ limit), so the flame stands alone with the
-                // "Will reach limit" verdict, exactly `runningOut`'s documented float-edge meaning.
-                guard spare >= 1 else { return .runningOut(eta: nil) }
+                // run-out-before-reset time (projection ≤ limit), so the flame stands alone and the
+                // tooltip reads "~100% used at reset", exactly `runningOut`'s documented float-edge meaning.
+                guard spare >= 1 else { return .runningOut(eta: nil, projectedFraction: projected) }
                 let usedShare = used / ctx.limit
                 let tick = displayMode == .remaining ? projected - usedShare
                                                      : usedShare + (1 - projected)
-                return .closeToLimit(spare: "~\(spare)% spare", tick: tick)
+                return .closeToLimit(spare: "~\(spare)% spare", tick: tick, projectedFraction: projected)
             case .behind:
                 let eta = Pace.secondsToRunOut(used: used, limit: ctx.limit, resetsAt: ctx.resetsAt,
                                                periodDuration: ctx.period, now: now)
                     .flatMap { Formatters.bareDeadline(at: now.addingTimeInterval($0),
                                                        mode: resetDisplayMode, now: now) }
-                return .runningOut(eta: eta)
+                return .runningOut(eta: eta, projectedFraction: result.projectedUsage / ctx.limit)
             }
         }
 
