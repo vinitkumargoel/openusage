@@ -2,9 +2,9 @@ import XCTest
 @testable import OpenUsage
 
 /// Locks the burn-rate pacing: the three-state thresholds (blue ahead / amber cutting-it-close /
-/// red behind), the amber-only projected-balance marker and "~N% spare" copy, the plain-language
-/// tooltip, and the run-out projection. All cases pin `now` and derive `resetsAt` from a target
-/// elapsed fraction so the math is deterministic.
+/// red behind), the amber-only projected-balance marker and "~N% spare" copy, the numeric
+/// projection-at-reset tooltip, and the run-out projection. All cases pin `now` and derive
+/// `resetsAt` from a target elapsed fraction so the math is deterministic.
 final class PaceTests: XCTestCase {
     private let now = Date(timeIntervalSince1970: 1_700_000_000)
     private let week: TimeInterval = 7 * 24 * 60 * 60
@@ -39,12 +39,6 @@ final class PaceTests: XCTestCase {
         XCTAssertEqual(Pace.status(used: 60, limit: 100, resetsAt: reset, periodDuration: week, now: now), .behind)  // 120 > 100
     }
 
-    func testStatusTextIsThePlainLanguageVerdict() {
-        XCTAssertEqual(Pace.Status.ahead.statusText, "Well within limit")
-        XCTAssertEqual(Pace.Status.onTrack.statusText, "Close to limit")
-        XCTAssertEqual(Pace.Status.behind.statusText, "Will reach limit")
-    }
-
     func testEvaluateProjectsEndOfPeriodUsage() {
         let reset = resetsAt(elapsed: 0.5, period: week) // half elapsed → projected = used * 2
         let result = Pace.evaluate(used: 30, limit: 100, resetsAt: reset, periodDuration: week, now: now)
@@ -72,13 +66,13 @@ final class PaceTests: XCTestCase {
 
     /// The amber tick fraction, present only in the `closeToLimit` state.
     private func tick(_ data: WidgetData) -> Double? {
-        if case .closeToLimit(_, let tick) = data.meterState(now: now) { return tick }
+        if case .closeToLimit(_, let tick, _) = data.meterState(now: now) { return tick }
         return nil
     }
 
     /// The amber spare copy, present only in the `closeToLimit` state.
     private func spare(_ data: WidgetData) -> String? {
-        if case .closeToLimit(let spare, _) = data.meterState(now: now) { return spare }
+        if case .closeToLimit(let spare, _, _) = data.meterState(now: now) { return spare }
         return nil
     }
 
@@ -102,10 +96,23 @@ final class PaceTests: XCTestCase {
         XCTAssertNil(tick(data))                         // reset date but unknown period
     }
 
-    func testTooltipIsTheVerdictWithNoDetailClause() {
-        XCTAssertEqual(weeklyData(used: 30).meterState(now: now).tooltip, "Well within limit") // projected 60%
-        XCTAssertEqual(weeklyData(used: 46).meterState(now: now).tooltip, "Close to limit")    // projected 92%
-        XCTAssertEqual(weeklyData(used: 60).meterState(now: now).tooltip, "Will reach limit")  // projected 120%
+    func testTooltipShowsNumericProjectionAtReset() {
+        // Each state surfaces the projected-at-reset figure the row doesn't already show: blue the
+        // cushion, amber the usage (complementing the visible "~N% spare"), red the overage.
+        XCTAssertEqual(weeklyData(used: 30).meterState(now: now).tooltip, "~40% left at reset")        // projected 60%
+        XCTAssertEqual(weeklyData(used: 46).meterState(now: now).tooltip, "~92% used at reset")        // projected 92%
+        XCTAssertEqual(weeklyData(used: 60).meterState(now: now).tooltip, "~20% over limit at reset")  // projected 120%
+    }
+
+    func testTooltipBlueCushionAtZeroUsage() {
+        // Nothing spent → projected 0% → the full quota is the cushion.
+        XCTAssertEqual(weeklyData(used: 0).meterState(now: now).tooltip, "~100% left at reset")
+    }
+
+    func testTooltipRedOverageFlooredToOnePercent() {
+        // Projected 100.4% (used 50.2, half the window gone): a real overage that rounds to 0%, so
+        // the copy floors to "~1%" rather than the nonsensical "~0% over limit".
+        XCTAssertEqual(weeklyData(used: 50.2).meterState(now: now).tooltip, "~1% over limit at reset")
     }
 
     func testSpentReadsLimitReached() {
@@ -147,10 +154,14 @@ final class PaceTests: XCTestCase {
         // meter promotes to the red run-out state with the flame alone — there's no run-out time
         // because the projection doesn't cross the limit before the reset.
         let data = weeklyData(used: 49.8)
-        XCTAssertEqual(data.meterState(now: now), .runningOut(eta: nil))
+        guard case .runningOut(let eta, _) = data.meterState(now: now) else {
+            return XCTFail("expected runningOut")
+        }
+        XCTAssertNil(eta)                                                 // flame alone, no run-out time
         XCTAssertNil(tick(data))                                          // no amber tick on a red bar
         XCTAssertNil(spare(data))                                         // no "~0% spare" copy
-        XCTAssertEqual(data.meterState(now: now).tooltip, "Will reach limit")
+        // Projected to land right at the limit, not past it → "used", not "over limit".
+        XCTAssertEqual(data.meterState(now: now).tooltip, "~100% used at reset")
     }
 
     func testProjectedExactlyAtLimitIsRedNotAmber() {
@@ -158,7 +169,10 @@ final class PaceTests: XCTestCase {
         // `onTrack` (Pace layer unchanged), but its cushion is 0%, so the meter shows red.
         let reset = resetsAt(elapsed: 0.5, period: week)
         XCTAssertEqual(Pace.status(used: 50, limit: 100, resetsAt: reset, periodDuration: week, now: now), .onTrack)
-        XCTAssertEqual(weeklyData(used: 50).meterState(now: now), .runningOut(eta: nil))
+        guard case .runningOut(let eta, _) = weeklyData(used: 50).meterState(now: now) else {
+            return XCTFail("expected runningOut")
+        }
+        XCTAssertNil(eta)
     }
 
     func testSmallButRealCushionStaysAmber() {
@@ -170,7 +184,7 @@ final class PaceTests: XCTestCase {
 
     func testRunningOutCarriesAnEtaBeforeReset() {
         // Behind, with the projected run-out landing before the reset → `runningOut` with a time.
-        guard case .runningOut(let eta) = weeklyData(used: 60).meterState(now: now) else {
+        guard case .runningOut(let eta, _) = weeklyData(used: 60).meterState(now: now) else {
             return XCTFail("expected runningOut")
         }
         XCTAssertNotNil(eta)
