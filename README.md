@@ -40,7 +40,7 @@ For working on the code, see the developer docs: [architecture](docs/architectur
 
 - macOS 15 (Sequoia) or later
 - Universal binary — runs natively on both Apple Silicon and Intel Macs
-- A JavaScript package runner — optional, only for the local Today / Yesterday / Last 30 Days spend tiles (which run `ccusage`). [Bun](https://bun.sh) is preferred (`bunx`), but `npx`, `npm exec`, `pnpm dlx`, or `yarn dlx` work too — so an existing Node.js install is enough.
+- A JavaScript package runner — optional, only for the local Today / Yesterday / Last 30 Days spend tiles (which run `ccusage`). [Bun](https://bun.sh) is preferred (`bunx`), but `pnpm dlx`, `yarn dlx`, `npm exec`, or `npx` work too — so an existing Node.js install is enough.
 
 ## Building
 

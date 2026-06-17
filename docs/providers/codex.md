@@ -18,7 +18,7 @@ Sign in once with the Codex CLI (`codex`); OpenUsage reads the same auth files (
 
 ## The spend tiles
 
-Today / Yesterday / Last 30 Days are computed **locally** from your Codex logs by running `ccusage` through whichever JavaScript package runner you already have — [Bun](https://bun.sh) (`bunx`) is preferred, otherwise `npx`, `npm exec`, `pnpm dlx`, or `yarn dlx`. The dollars are estimated from token counts — that's the ⓘ on those rows. No log data leaves your Mac.
+Today / Yesterday / Last 30 Days are computed **locally** from your Codex logs by running `ccusage` through whichever JavaScript package runner you already have — [Bun](https://bun.sh) (`bunx`) is preferred, otherwise `pnpm dlx`, `yarn dlx`, `npm exec`, or `npx`. The dollars are estimated from token counts — that's the ⓘ on those rows. No log data leaves your Mac.
 
 ## Troubleshooting
 

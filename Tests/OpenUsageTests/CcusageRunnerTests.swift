@@ -131,6 +131,24 @@ final class CcusageRunnerTests: XCTestCase {
         XCTAssertNil(CcusageRunner.nvmDefaultBinPath(home: home))
     }
 
+    func testNvmDefaultBinPathFollowsAliasIndirection() throws {
+        // `default` -> `node` -> `v20.11.0`
+        let home = try makeTempHome()
+        try writeNvmAlias("node", home: home, named: "default")
+        try writeNvmAlias("v20.11.0", home: home, named: "node")
+        XCTAssertEqual(
+            CcusageRunner.nvmDefaultBinPath(home: home),
+            home.appendingPathComponent(".nvm/versions/node/v20.11.0/bin").path
+        )
+    }
+
+    func testNvmDefaultBinPathReturnsNilForUnresolvableMetaAlias() throws {
+        // `lts/*` isn't a plain alias file, so it can't be resolved to a version here.
+        let home = try makeTempHome()
+        try writeNvmAlias("lts/*", home: home, named: "default")
+        XCTAssertNil(CcusageRunner.nvmDefaultBinPath(home: home))
+    }
+
     // MARK: - PATH enrichment
 
     func testPathEntriesIncludeVersionManagerDirsAndDedupe() throws {
@@ -258,9 +276,9 @@ final class CcusageRunnerTests: XCTestCase {
         return home
     }
 
-    private func writeNvmAlias(_ version: String, home: URL) throws {
+    private func writeNvmAlias(_ value: String, home: URL, named name: String = "default") throws {
         let aliasDir = home.appendingPathComponent(".nvm/alias")
         try FileManager.default.createDirectory(at: aliasDir, withIntermediateDirectories: true)
-        try (version + "\n").write(to: aliasDir.appendingPathComponent("default"), atomically: true, encoding: .utf8)
+        try (value + "\n").write(to: aliasDir.appendingPathComponent(name), atomically: true, encoding: .utf8)
     }
 }

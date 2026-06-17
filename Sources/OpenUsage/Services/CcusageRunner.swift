@@ -258,14 +258,34 @@ struct CcusageRunner {
     }
 
     /// Resolves nvm's default alias (`~/.nvm/alias/default`, e.g. `22.16.0`) to its node `bin`
-    /// directory (`~/.nvm/versions/node/v22.16.0/bin`). Returns nil if the alias is absent/empty.
+    /// directory (`~/.nvm/versions/node/v22.16.0/bin`). The alias may name a concrete version or
+    /// point at another alias (`node`, `stable`, a custom name), which we follow one level. Returns
+    /// nil if it's absent/empty or an unresolvable meta-alias (e.g. `lts/*`).
     static func nvmDefaultBinPath(home: URL) -> String? {
-        let aliasPath = home.appendingPathComponent(".nvm/alias/default").path
-        guard let raw = try? String(contentsOfFile: aliasPath, encoding: .utf8) else { return nil }
-        let version = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !version.isEmpty else { return nil }
+        let aliasDir = home.appendingPathComponent(".nvm/alias")
+        guard let version = resolveNvmAlias("default", aliasDir: aliasDir) else { return nil }
         let normalized = version.hasPrefix("v") ? version : "v\(version)"
         return home.appendingPathComponent(".nvm/versions/node/\(normalized)/bin").path
+    }
+
+    /// Reads `<aliasDir>/<name>` and returns a concrete version string, following one level of
+    /// alias indirection. nil if the file is missing/empty or doesn't resolve to a version.
+    private static func resolveNvmAlias(_ name: String, aliasDir: URL) -> String? {
+        func read(_ alias: String) -> String? {
+            guard let raw = try? String(contentsOfFile: aliasDir.appendingPathComponent(alias).path, encoding: .utf8)
+            else { return nil }
+            let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            return value.isEmpty ? nil : value
+        }
+        func isVersion(_ value: String) -> Bool {
+            value.hasPrefix("v") || (value.first?.isNumber ?? false)
+        }
+
+        guard let value = read(name) else { return nil }
+        if isVersion(value) { return value }
+        // `value` is another alias (e.g. `default` -> `node`): follow it one level.
+        guard let nested = read(value), isVersion(nested) else { return nil }
+        return nested
     }
 
     static func parseOutput(_ stdout: String) -> CcusageDailyUsage? {

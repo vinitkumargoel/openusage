@@ -25,7 +25,7 @@ Tokens are refreshed automatically; rotated tokens are written back where they c
 
 ## The spend tiles
 
-Today / Yesterday / Last 30 Days are computed **locally** from your Claude Code logs by running `ccusage` through whichever JavaScript package runner you already have — [Bun](https://bun.sh) (`bunx`) is preferred, otherwise `npx`, `npm exec`, `pnpm dlx`, or `yarn dlx`. The dollars are estimated from token counts — that's what the ⓘ on those rows means. No log data leaves your Mac.
+Today / Yesterday / Last 30 Days are computed **locally** from your Claude Code logs by running `ccusage` through whichever JavaScript package runner you already have — [Bun](https://bun.sh) (`bunx`) is preferred, otherwise `pnpm dlx`, `yarn dlx`, `npm exec`, or `npx`. The dollars are estimated from token counts — that's what the ⓘ on those rows means. No log data leaves your Mac.
 
 ## Troubleshooting
 
