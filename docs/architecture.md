@@ -6,9 +6,9 @@ A high-level map of how OpenUsage is put together, for people working on the cod
 ## The shape of the app
 
 OpenUsage is a single SwiftPM executable — there is no Xcode project. It's a menu-bar app: a SwiftUI
-interface hosted inside an AppKit status item and popover. The code is grouped by role:
+interface hosted inside an AppKit status item and panel. The code is grouped by role:
 
-- `App/` — startup and the AppKit bridge (status item, popover, the app entry point).
+- `App/` — startup and the AppKit bridge (status item, panel, the app entry point).
 - `Models/` — the small value types the rest of the app speaks in (`MetricLine`, `WidgetData`, descriptors).
 - `Providers/` — one folder per provider (Claude, Codex, Cursor, Devin, Grok).
 - `Stores/` — the mutable state the UI observes.
@@ -52,8 +52,13 @@ snapshot has actually expired.
 
 ## The AppKit bridge
 
-macOS menu-bar apps live in an `NSStatusItem` and show their content in an `NSPopover`. `App/` owns that
-AppKit layer and hosts the SwiftUI views inside it, so the bulk of the UI can stay plain SwiftUI.
+macOS menu-bar apps live in an `NSStatusItem`. OpenUsage shows its content in a custom, key-capable
+`NSPanel` rather than an `NSPopover`: a popover's window is only key while the whole app is active, and
+activating a menu-bar (accessory) app is asynchronous and unreliable on recent macOS, so a popover
+ends up unable to receive keystrokes until a second click. A non-activating `NSPanel` whose
+`canBecomeKey` is `true` takes key focus the instant it opens, so keyboard navigation and the Settings
+shortcut recorder just work. `App/` owns that AppKit layer and hosts the SwiftUI views inside it, so
+the bulk of the UI can stay plain SwiftUI.
 
 ## Platform support
 

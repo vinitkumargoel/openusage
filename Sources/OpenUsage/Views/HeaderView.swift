@@ -31,18 +31,16 @@ struct HeaderView: View {
         .glassButtonGroup(spacing: 4)
     }
 
-    /// While the Customize screen is open the slot is the prominent "Done" button — clicking it (or ⏎)
-    /// returns to the dashboard, matching how the old Customize button behaved. Otherwise it's the
-    /// "More" button: the same round glass control, opening a pull-down whose "Customize Metrics" item
-    /// is the way into Customize.
+    /// While the Customize screen is open the slot is the prominent "Done" button — clicking it (or
+    /// pressing ⏎, which `PopoverKeyReader` routes for the whole popover) returns to the dashboard.
+    /// Otherwise it's the "More" button: the same round glass control, opening a pull-down whose
+    /// "Customize Metrics" item is the way into Customize.
     @ViewBuilder
     private var leadingControl: some View {
         if layout.screen == .customize {
             roundButton("Done", systemImage: "checkmark", prominent: true) {
                 toggle(.customize)
             }
-            // Plain Return (not .defaultAction, which would restyle the glass button as default).
-            .keyboardShortcut(.return, modifiers: [])
         } else {
             roundButton("More", systemImage: "ellipsis", prominent: false) {
                 presentMoreMenu()

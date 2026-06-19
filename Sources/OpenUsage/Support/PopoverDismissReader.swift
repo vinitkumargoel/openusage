@@ -58,29 +58,56 @@ struct PopoverVisibilityReader: NSViewRepresentable {
     }
 }
 
-/// Handles Esc in the hosting menu-bar popover: a handler gets first refusal (e.g. backing out of
-/// Customize); when it declines, the popover is dismissed through `MenuBarPopover.dismiss`, the
-/// same path a status-item click takes — so it stays in sync, reopens in one click, and trips the
-/// visibility reset (cancelling edit mode + the jiggle).
-struct EscapeToCloseReader: NSViewRepresentable {
+/// Handles the popover's two bare navigation keys via a local key monitor. SwiftUI
+/// `.keyboardShortcut` is unreliable here — a hidden/zero-size shortcut button never registers, and
+/// even a visible default button only fires when the popover is the key window — so the popover's
+/// keyboard navigation rides this low-level monitor instead, which sees the raw keyDown the moment
+/// the app processes it.
+///
+/// - **Esc**: `onEscape` gets first refusal (e.g. backing out of Customize); when it declines, the
+///   popover is dismissed through `MenuBarPopover.dismiss`, the same path a status-item click takes
+///   — so it stays in sync, reopens in one click, and trips the visibility reset (cancelling edit
+///   mode + the jiggle).
+/// - **Return**: `onReturn` opens/closes Customize (the affordance the standalone Customize button
+///   carried before it folded into the More menu). Consuming the key here is also what stops a bare
+///   Return from falling through and dismissing the popover.
+struct PopoverKeyReader: NSViewRepresentable {
     /// Called first on Esc. Return `true` when the press was handled in-popover (Esc then does
     /// NOT close); return `false` to let the popover dismiss.
     var onEscape: @MainActor () -> Bool = { false }
+    /// Called on plain (unmodified) Return. Return `true` to consume it (e.g. toggling Customize);
+    /// `false` lets the key fall through to a focused control.
+    var onReturn: @MainActor () -> Bool = { false }
 
     func makeNSView(context: Context) -> NSView {
         let view = MonitorView()
         view.onEscape = onEscape
+        view.onReturn = onReturn
         return view
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        (nsView as? MonitorView)?.onEscape = onEscape
+        guard let view = nsView as? MonitorView else { return }
+        view.onEscape = onEscape
+        view.onReturn = onReturn
+    }
+
+    /// Whether a bare-key keyDown belongs to the popover: its key window must *be* the panel. The
+    /// panel is a non-activating key window that takes focus the instant it opens, so a foreign key
+    /// window (an open About panel, a tracking `NSMenu` from the More menu or a Settings picker) — or
+    /// no key window at all — is correctly *not* the popover's, and Esc/Return leave it alone instead
+    /// of hijacking it. (An earlier build also claimed a nil key window, to paper over `NSPopover`'s
+    /// activation race; the `NSPanel` removed that race, so the strict match is correct and safer.)
+    static func keyTargetsPopover(eventWindowID: ObjectIdentifier?, popoverWindowID: ObjectIdentifier) -> Bool {
+        eventWindowID == popoverWindowID
     }
 
     final class MonitorView: NSView {
         var onEscape: (@MainActor () -> Bool)?
+        var onReturn: (@MainActor () -> Bool)?
         private var monitor: Any?
         private static let escapeKeyCode: UInt16 = 53
+        private static let returnKeyCode: UInt16 = 36
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
@@ -90,15 +117,34 @@ struct EscapeToCloseReader: NSViewRepresentable {
             }
             guard window != nil else { return }
             monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-                guard event.keyCode == MonitorView.escapeKeyCode else { return event }
+                let keyCode = event.keyCode
+                guard keyCode == MonitorView.escapeKeyCode || keyCode == MonitorView.returnKeyCode else {
+                    return event
+                }
+                // Only bare Return navigates; ⌘⏎, ⌥⏎, etc. belong to other controls.
+                let isReturn = keyCode == MonitorView.returnKeyCode
+                if isReturn,
+                   !event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty {
+                    return event
+                }
                 let eventWindowID = event.window.map(ObjectIdentifier.init)
                 let consumed = MainActor.assumeIsolated { () -> Bool in
-                    guard let self, let window = self.window,
-                          eventWindowID == ObjectIdentifier(window) else { return false }
+                    // Only act while the popover is on-screen; the SwiftUI tree (and this monitor) can
+                    // outlive a close, and `isVisible` stands in for `NSPopover.isShown`.
+                    guard let self, let window = self.window, window.isVisible else { return false }
+                    // The key must target the popover — its key window must be the panel, so a key
+                    // pressed while a menu / About panel owns focus is left alone (see `keyTargetsPopover`).
+                    guard PopoverKeyReader.keyTargetsPopover(
+                        eventWindowID: eventWindowID,
+                        popoverWindowID: ObjectIdentifier(window)
+                    ) else { return false }
                     // A text control is editing, or the Settings shortcut recorder is capturing a
-                    // combo: Esc belongs to it (cancel the capture), not to popover navigation.
+                    // combo: the key belongs to it (insert / cancel / record), not to popover nav.
                     if window.firstResponder is NSText || ShortcutRecorderField.isRecordingActive {
                         return false
+                    }
+                    if isReturn {
+                        return self.onReturn?() ?? false
                     }
                     if self.onEscape?() == true {
                         return true
