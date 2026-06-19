@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.7.0-beta.9
+
+### New Features
+- Grok local spend tiles + unify spend tiles across providers ([#650](https://github.com/robinebers/openusage/pull/650)) by @robinebers
+
+### Bug Fixes
+- Host the dashboard in a key-capable NSPanel (reliable Esc/Return) ([#652](https://github.com/robinebers/openusage/pull/652)) by @robinebers
+- Unify popover max height across Customize and Settings ([#651](https://github.com/robinebers/openusage/pull/651)) by @robinebers
+
+---
+
+### Changelog
+**Full Changelog**: [v0.7.0-beta.8...v0.7.0-beta.9](https://github.com/robinebers/openusage/compare/v0.7.0-beta.8...v0.7.0-beta.9)
+
+- [b6c6fcc](https://github.com/robinebers/openusage/commit/b6c6fccc3740063626f4a25b7cacd90376419ed7) fix(popover): host the dashboard in a key-capable NSPanel (reliable Esc/Return) (#652) by @robinebers
+- [849862f](https://github.com/robinebers/openusage/commit/849862f4650a680d2b15bc63b7fd0244a58df9b2) fix: unify popover max height across Customize and Settings (#591) (#651) by @robinebers
+- [210a395](https://github.com/robinebers/openusage/commit/210a39552b1af7e091288efd21a04a707cf2137c) feat: Grok local spend tiles + unify spend tiles across providers (#646) (#650) by @robinebers
+
 ## v0.7.0-beta.8
 
 ### New Features
