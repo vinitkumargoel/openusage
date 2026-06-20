@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.7.0-beta.10
+
+### New Features
+- feat(footer): fold Settings + Check for Updates into the More menu ([#657](https://github.com/robinebers/openusage/pull/657)) by @robinebers
+- feat(updates): check for updates hourly instead of daily ([#655](https://github.com/robinebers/openusage/pull/655)) by @robinebers
+
+### Bug Fixes
+- fix(tooltip): reveal hover tooltips after a short delay, not the slow native one ([#660](https://github.com/robinebers/openusage/pull/660)) by @validatedev
+- fix(spend): show "$0.00 · 0 tokens" for zero-usage periods, add tokens unit ([#656](https://github.com/robinebers/openusage/pull/656)) by @robinebers
+
+---
+
+### Changelog
+**Full Changelog**: [v0.7.0-beta.9...v0.7.0-beta.10](https://github.com/robinebers/openusage/compare/v0.7.0-beta.9...v0.7.0-beta.10)
+
+- [4f02053](https://github.com/robinebers/openusage/commit/4f02053df0ba6f9a8380a1cb87bf1698dadf2d59) fix(tooltip): reveal hover tooltips after a short delay, not the slow native one (#660) by @validatedev
+- [040c511](https://github.com/robinebers/openusage/commit/040c5115ea5fbaab45b14b68838b3ea52d51ce1c) feat(footer): fold Settings + Check for Updates into the More menu (#657) by @robinebers
+- [c436284](https://github.com/robinebers/openusage/commit/c436284e91b57432787cdb5683c4a9909eb85991) fix(spend): show "$0.00 · 0 tokens" for zero-usage periods, add tokens unit (#656) by @robinebers
+- [2a9cf92](https://github.com/robinebers/openusage/commit/2a9cf929a6c8a79831d948cbefa000a99c87e4d1) feat(updates): check for updates hourly instead of daily (#655) by @robinebers
+
+---
+
 ## v0.7.0-beta.9
 
 ### New Features
