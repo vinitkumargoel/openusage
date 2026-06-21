@@ -31,7 +31,7 @@ final class ClaudeProvider: ProviderRuntime {
     }
 
     func refresh() async -> ProviderSnapshot {
-        guard let state = authStore.loadCredentials(),
+        guard let state = await loadOffMainActor({ [authStore] in authStore.loadCredentials() }),
               state.oauth.accessToken?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
         else {
             AppLog.info(LogTag.auth("claude"), "no access token, not logged in")
@@ -122,7 +122,10 @@ final class ClaudeProvider: ProviderRuntime {
                 AppLog.warn(LogTag.auth("claude"), "session expired (invalid_grant)")
                 throw ClaudeAuthError.sessionExpired
             }
-            throw ClaudeAuthError.tokenExpired
+            // A 400/401 without a recognized OAuth error code isn't necessarily an expired token — it
+            // can be an HTML proxy/WAF page or a gateway error. Surface the HTTP status rather than
+            // telling the user to re-login (which can't fix a transport/infra failure).
+            throw ClaudeUsageError.requestFailed(response.statusCode)
         }
         guard (200..<300).contains(response.statusCode) else {
             throw ClaudeUsageError.requestFailed(response.statusCode)
@@ -136,7 +139,15 @@ final class ClaudeProvider: ProviderRuntime {
         if let expiresIn = decoded.expiresIn {
             state.oauth.expiresAt = now().timeIntervalSince1970 * 1000 + expiresIn * 1000
         }
-        try? authStore.save(state)
+        // Fail loudly: a swallowed save leaves the OLD refresh token on disk after a rotation, so the
+        // next launch refreshes with a server-invalidated token and the user sees a misleading
+        // "session expired". The refreshed token still works for this session, so we log and continue
+        // rather than fail the live fetch.
+        do {
+            try authStore.save(state)
+        } catch {
+            AppLog.error(LogTag.auth("claude"), "failed to persist rotated credentials; using the refreshed token for this session only: \(error.localizedDescription)")
+        }
         AppLog.info(LogTag.auth("claude"), "token refresh ok (rotated)")
         return decoded.accessToken
     }

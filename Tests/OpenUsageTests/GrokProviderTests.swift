@@ -23,6 +23,23 @@ final class GrokAuthStoreTests: XCTestCase {
         XCTAssertEqual(candidates.first?.token, "token")
         XCTAssertEqual(candidates.first?.entryKey, "https://auth.x.ai::client")
     }
+
+    func testSaveRefusesToOverwriteACorruptAuthFile() throws {
+        // A present-but-corrupt auth.json must NOT be silently rebuilt from in-memory state (which
+        // would drop other accounts' entries). save() must throw and leave the file untouched.
+        let validJSON = #"{"https://auth.x.ai::client":{"key":"token","refresh_token":"refresh","expires_at":"2026-07-01T00:00:00.000Z"}}"#
+        let files = FakeFiles([GrokAuthStore.authPath: validJSON])
+        let store = GrokAuthStore(files: files, now: { OpenUsageISO8601.date(from: "2026-02-02T00:00:00.000Z")! })
+        var state = try XCTUnwrap(store.loadAuthCandidates().first)
+        state.entry.key = "rotated-token"
+
+        // Corrupt the file on disk, then attempt to persist the rotation.
+        let corrupt = "{ not valid json"
+        files.files[GrokAuthStore.authPath] = corrupt
+
+        XCTAssertThrowsError(try store.save(state))
+        XCTAssertEqual(files.files[GrokAuthStore.authPath], corrupt, "corrupt file must be left untouched, not clobbered")
+    }
 }
 
 final class GrokUsageMapperTests: XCTestCase {
@@ -48,6 +65,28 @@ final class GrokUsageMapperTests: XCTestCase {
         ))
 
         XCTAssertEqual(progress(mapped.lines, "Credits used")?.used ?? 0, 7.128, accuracy: 0.001)
+        XCTAssertEqual(badge(mapped.lines, "Pay as you go")?.text, "Disabled")
+        XCTAssertEqual(badge(mapped.lines, "Pay as you go")?.colorHex, "#a3a3a3")
+    }
+
+    func testMapsMissingOnDemandCapAsDisabled() throws {
+        // A SuperGrok account with no pay-as-you-go omits `onDemandCap` entirely. Previously the
+        // all-or-nothing guard threw `invalidResponse` ("Grok billing response changed."); it must
+        // now render the Disabled badge instead, like a present cap of 0.
+        let body: [String: Any] = [
+            "config": [
+                "used": ["val": 2500],
+                "monthlyLimit": ["val": 10000],
+                "billingPeriodEnd": "2026-06-01T00:00:00+00:00"
+            ]
+        ]
+        let mapped = try GrokUsageMapper.mapBillingResponse(HTTPResponse(
+            statusCode: 200,
+            headers: [:],
+            body: try JSONSerialization.data(withJSONObject: body)
+        ))
+
+        XCTAssertEqual(progress(mapped.lines, "Credits used")?.used, 25)
         XCTAssertEqual(badge(mapped.lines, "Pay as you go")?.text, "Disabled")
         XCTAssertEqual(badge(mapped.lines, "Pay as you go")?.colorHex, "#a3a3a3")
     }
