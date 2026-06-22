@@ -33,6 +33,51 @@ enum SpendTileMapper {
         lines.append(.values(label: "Last 30 Days", values: spendValues(tokens: totalTokens, costUSD: totalCost, estimated: estimated)))
     }
 
+    /// Number of days before `now` the trend window spans; with `now` itself that's 31 calendar bars,
+    /// matching the ccusage `daysBack: 30` query window the daily rows come from.
+    private static let trendWindowDays = 30
+
+    /// Append the Usage Trend chart line: one bar per calendar day over the window, value = tokens used
+    /// that day. Tokens are always measured (no estimate flag), so the chart needs only the per-day
+    /// counts plus a source note. Appends nothing when the whole window is idle, so a source with no
+    /// usage leaves "No data" rather than a flat row of zero bars.
+    static func appendUsageTrend(_ usage: CcusageDailyUsage, to lines: inout [MetricLine], now: Date = Date(), note: String) {
+        let points = trendPoints(usage, now: now)
+        guard !points.isEmpty else { return }
+        lines.append(.chart(label: "Usage Trend", points: points, note: note))
+    }
+
+    /// Per-day token points across the queried window (today + the previous 30 days), oldest first.
+    /// Tokens are summed per calendar day, so two source rows that normalize to the same date (mixed
+    /// formats) become one bar carrying their total rather than two bars splitting it. Idle days are
+    /// zero-filled, not dropped, so the sparkline stays calendar-true: a gap shows as a short bar in
+    /// place instead of collapsing two non-adjacent days into neighbors, and the cap is calendar days,
+    /// not active ones. Returns empty when nothing was used in the window — there's no trend to draw.
+    /// Each point carries a "Jun 21" axis label and a pre-formatted "222M tokens" readout.
+    private static func trendPoints(_ usage: CcusageDailyUsage, now: Date) -> [MetricChartPoint] {
+        var tokensByDay: [String: Double] = [:]
+        for day in usage.daily {
+            let tokens = Double(day.totalTokens)
+            guard tokens.isFinite, tokens >= 0, let key = dayKey(fromUsageDate: day.date) else { continue }
+            tokensByDay[key, default: 0] += tokens
+        }
+        guard tokensByDay.values.contains(where: { $0 > 0 }) else { return [] }
+
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: now)
+        return (0...trendWindowDays).reversed().compactMap { offset -> MetricChartPoint? in
+            guard let day = calendar.date(byAdding: .day, value: -offset, to: today) else { return nil }
+            let key = dayKey(from: day)
+            let tokens = tokensByDay[key] ?? 0
+            return MetricChartPoint(
+                value: tokens,
+                // The app's localized "Jun 21" month/day, not a hardcoded "6/21".
+                label: Formatters.monthDayLabel(day),
+                valueLabel: MetricFormatter.number(tokens, kind: .count, style: .row) + " tokens"
+            )
+        }
+    }
+
     private static func dayKey(from date: Date) -> String {
         let components = Calendar.current.dateComponents([.year, .month, .day], from: date)
         return String(format: "%04d-%02d-%02d", components.year ?? 0, components.month ?? 0, components.day ?? 0)
