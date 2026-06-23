@@ -4,6 +4,10 @@ OpenUsage is a SwiftPM-based SwiftUI menu-bar app for macOS that shows AI provid
 
 This file documents the engineering conventions for the project. Read it before contributing.
 
+## Agent Instructions
+
+AGENTS.md is the source of truth for agent instructions in this repository. CLAUDE.md files may only point to the nearest AGENTS.md file with `@AGENTS.md`; do not add guidance, duplicate instructions, or project rules to CLAUDE.md.
+
 > **Repository note:** This is the native Swift edition of OpenUsage. Active development happens on the `swift` branch.
 
 ## Rollout: Tauri to Swift (read first)
