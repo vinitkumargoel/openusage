@@ -71,13 +71,7 @@ final class GrokProvider: ProviderRuntime {
             SpendTileMapper.appendTokenUsage(tokenUsage, to: &mapped.lines, now: now())
         }
 
-        return ProviderSnapshot(
-            providerID: provider.id,
-            displayName: provider.displayName,
-            plan: plan,
-            lines: mapped.lines,
-            refreshedAt: now()
-        )
+        return ProviderSnapshot.make(provider: provider, plan: plan, lines: mapped.lines, refreshedAt: now())
     }
 
     private func fetchBillingWithRetry(accessToken: String, state: inout GrokAuthState) async throws -> HTTPResponse {

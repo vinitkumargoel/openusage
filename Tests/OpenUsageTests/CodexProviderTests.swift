@@ -68,9 +68,9 @@ final class CodexUsageMapperTests: XCTestCase {
 
     func testAppendsTokenUsageLines() {
         var lines: [MetricLine] = []
-        let usage = CcusageDailyUsage(daily: [
-            CcusageDay(date: "2026-02-20", totalTokens: 150, costUSD: 0.75),
-            CcusageDay(date: "2026-02-01", totalTokens: 300, costUSD: 1.0)
+        let usage = DailyUsageSeries(daily: [
+            DailyUsageEntry(date: "2026-02-20", totalTokens: 150, costUSD: 0.75),
+            DailyUsageEntry(date: "2026-02-01", totalTokens: 300, costUSD: 1.0)
         ])
 
         SpendTileMapper.appendTokenUsage(
@@ -97,7 +97,7 @@ final class CodexUsageMapperTests: XCTestCase {
         // source). Fixed once in SpendTileMapper, so it holds for every provider that funnels through it.
         var lines: [MetricLine] = []
         SpendTileMapper.appendTokenUsage(
-            CcusageDailyUsage(daily: [CcusageDay(date: "2026-02-19", totalTokens: 0, costUSD: nil)]),
+            DailyUsageSeries(daily: [DailyUsageEntry(date: "2026-02-19", totalTokens: 0, costUSD: nil)]),
             to: &lines,
             now: makeDate("2026-02-20T16:00:00.000Z")
         )
@@ -114,7 +114,7 @@ final class CodexUsageMapperTests: XCTestCase {
         // zero — so the row shows just the labeled token count rather than a misleading "$0.00 ·".
         var lines: [MetricLine] = []
         SpendTileMapper.appendTokenUsage(
-            CcusageDailyUsage(daily: [CcusageDay(date: "2026-02-20", totalTokens: 1_200_000, costUSD: nil)]),
+            DailyUsageSeries(daily: [DailyUsageEntry(date: "2026-02-20", totalTokens: 1_200_000, costUSD: nil)]),
             to: &lines,
             now: makeDate("2026-02-20T16:00:00.000Z")
         )

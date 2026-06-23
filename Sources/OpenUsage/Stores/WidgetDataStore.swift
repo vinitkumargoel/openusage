@@ -114,10 +114,10 @@ final class WidgetDataStore {
         let durationMs = Int(Date().timeIntervalSince(start) * 1000)
         // Count THIS batch's actual outcomes, not the long-lived `providerErrors` map (which persists
         // across passes, so reading it would miscount cache hits and stale earlier failures).
-        let refreshed = outcomes.filter { $0 == .refreshed }.count
-        let failed = outcomes.filter { $0 == .failed }.count
-        let cached = outcomes.filter { $0 == .cacheHit }.count
-        let backedOff = outcomes.filter { $0 == .backedOff }.count
+        let refreshed = outcomes.count { $0 == .refreshed }
+        let failed = outcomes.count { $0 == .failed }
+        let cached = outcomes.count { $0 == .cacheHit }
+        let backedOff = outcomes.count { $0 == .backedOff }
         AppLog.info(.refresh, "batch end (\(durationMs)ms, \(refreshed) ok / \(failed) failed / \(cached) cached / \(backedOff) backed off)")
     }
 

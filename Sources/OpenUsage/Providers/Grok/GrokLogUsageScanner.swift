@@ -1,12 +1,12 @@
 import Foundation
 
-/// Builds ccusage-style daily token/cost estimates for Grok from the Grok CLI's local log.
+/// Builds daily token/cost estimates for Grok from the Grok CLI's local log.
 ///
 /// Unlike Claude/Codex (whose spend tiles shell out to `ccusage`), Grok's token data lives in a
 /// single global append-only log, `~/.grok/logs/unified.jsonl`, on `shell.turn.inference_done` lines.
 /// Those lines carry token counts but no model id, so the scanner attributes each row to a model by
 /// tracking the "current model" per CLI process (`pid`) from the model-change events the CLI also
-/// logs. The output is the same `CcusageDailyUsage` shape the Claude/Codex spend tiles consume, so it
+/// logs. The output is the same `DailyUsageSeries` shape the Claude/Codex spend tiles consume, so it
 /// flows straight through `SpendTileMapper`.
 struct GrokLogUsageScanner: Sendable {
     var files: TextFileAccessing
@@ -39,7 +39,7 @@ struct GrokLogUsageScanner: Sendable {
     /// `async` and nonisolated (this is a plain `Sendable` struct, not `@MainActor`), so the whole-file
     /// read + parse runs off the main actor when a `@MainActor` provider `await`s it — the same way
     /// `CcusageRunner.query` keeps Claude/Codex's log work off the UI thread.
-    func scan(daysBack: Int = 30, now: Date = Date()) async -> CcusageDailyUsage? {
+    func scan(daysBack: Int = 30, now: Date = Date()) async -> DailyUsageSeries? {
         let path = logPath
         guard files.exists(path), let text = try? files.readText(path) else {
             return nil
@@ -56,7 +56,7 @@ struct GrokLogUsageScanner: Sendable {
     /// "current model" (tracked regardless of date, so a session straddling the `since` boundary stays
     /// attributed); each in-window `inference_done` row is priced against its `pid`'s current model and
     /// bucketed by local calendar day.
-    static func parse(_ text: String, since: Date) -> CcusageDailyUsage {
+    static func parse(_ text: String, since: Date) -> DailyUsageSeries {
         var modelByPID: [Int: String] = [:]
         var tokensByDay: [String: Int] = [:]
         var costByDay: [String: Double] = [:]
@@ -117,13 +117,13 @@ struct GrokLogUsageScanner: Sendable {
         }
 
         let days = tokensByDay.keys.sorted(by: >).map { day in
-            CcusageDay(
+            DailyUsageEntry(
                 date: day,
                 totalTokens: tokensByDay[day] ?? 0,
                 costUSD: pricedDays.contains(day) ? (costByDay[day] ?? 0) : nil
             )
         }
-        return CcusageDailyUsage(daily: days)
+        return DailyUsageSeries(daily: days)
     }
 
     /// The model id carried by a model-change event, or `nil` for any other line. The Grok CLI signals

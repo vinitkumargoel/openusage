@@ -124,6 +124,7 @@ struct WidgetGroupedListView: View {
     /// the global reset-format flip, and a per-provider refresh — without a trip into Customize.
     @ViewBuilder
     private func rowMenu(_ descriptor: WidgetDescriptor, providerID: String) -> some View {
+        let data = dataStore.data(for: descriptor)
         if descriptor.pinnable {
             Button(layout.isPinned(descriptor.id) ? "Unpin" : "Pin to menu bar") {
                 if layout.isPinned(descriptor.id) {
@@ -138,14 +139,14 @@ struct WidgetGroupedListView: View {
         Button("Hide") {
             layout.setMetricEnabled(descriptor.id, false)
         }
-        if dataStore.data(for: descriptor).hasMeterStyleToggle {
+        if data.hasMeterStyleToggle {
             Button(dataStore.meterStyle == .remaining
                    ? "Show what's used"
                    : "Show what's left") {
                 dataStore.meterStyle.toggle()
             }
         }
-        if dataStore.data(for: descriptor).hasResetLabel {
+        if data.hasResetLabel {
             Button(dataStore.resetDisplayMode == .relative
                    ? "Show exact reset times"
                    : "Show reset countdowns") {

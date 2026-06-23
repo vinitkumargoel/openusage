@@ -211,34 +211,40 @@ struct ClaudeAuthStore: Sendable {
     private func loadKeychainCredentials() -> ClaudeCredentialState? {
         // The service name is safe to log; NEVER log the returned credential blob / OAuth tokens.
         for service in keychainServiceCandidates() {
-            if let value = try? keychain.readGenericPasswordForCurrentUser(service: service),
-               let parsed = Self.parseCredentials(value),
-               let oauth = parsed.claudeAiOauth,
-               oauth.accessToken?.isEmpty == false {
-                AppLog.debug(.keychain, "read hit service=\(service)")
-                return ClaudeCredentialState(
-                    oauth: oauth,
-                    source: .keychainCurrentUser(service: service),
-                    fullData: parsed,
-                    inferenceOnly: false
-                )
+            if let state = credentialState(
+                from: try? keychain.readGenericPasswordForCurrentUser(service: service),
+                service: service, source: .keychainCurrentUser(service: service)
+            ) {
+                return state
             }
-
-            if let value = try? keychain.readGenericPassword(service: service),
-               let parsed = Self.parseCredentials(value),
-               let oauth = parsed.claudeAiOauth,
-               oauth.accessToken?.isEmpty == false {
-                AppLog.debug(.keychain, "read hit service=\(service)")
-                return ClaudeCredentialState(
-                    oauth: oauth,
-                    source: .keychainLegacy(service: service),
-                    fullData: parsed,
-                    inferenceOnly: false
-                )
+            if let state = credentialState(
+                from: try? keychain.readGenericPassword(service: service),
+                service: service, source: .keychainLegacy(service: service)
+            ) {
+                return state
             }
             AppLog.debug(.keychain, "read miss service=\(service)")
         }
         return nil
+    }
+
+    /// Parse one keychain hit into a credential state, or `nil` if it's absent / malformed / tokenless.
+    /// Shared by the current-user and legacy reads so they don't repeat the parse-guard-log-build block;
+    /// the keychain read itself stays at the call site to preserve the read order and error-swallowing.
+    private func credentialState(
+        from value: String?,
+        service: String,
+        source: ClaudeCredentialState.Source
+    ) -> ClaudeCredentialState? {
+        guard let value,
+              let parsed = Self.parseCredentials(value),
+              let oauth = parsed.claudeAiOauth,
+              oauth.accessToken?.isEmpty == false
+        else {
+            return nil
+        }
+        AppLog.debug(.keychain, "read hit service=\(service)")
+        return ClaudeCredentialState(oauth: oauth, source: source, fullData: parsed, inferenceOnly: false)
     }
 
     private func credentialsPath() -> String {
@@ -262,7 +268,7 @@ struct ClaudeAuthStore: Sendable {
     private func hashSuffix(_ value: String) -> String {
         let normalized = value.precomposedStringWithCanonicalMapping
         let digest = SHA256.hash(data: Data(normalized.utf8))
-        return digest.map { String(format: "%02x", $0) }.joined().prefix(8).description
+        return String(digest.map { String(format: "%02x", $0) }.joined().prefix(8))
     }
 }
 

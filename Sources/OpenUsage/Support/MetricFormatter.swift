@@ -27,21 +27,17 @@ enum MetricFormatter {
         case .percent:
             return "\(Int(value.rounded()))%"
         case .dollars:
+            // Tray and row abbreviate four figures and up ("$1.2M", "$2.1K") so neither carries
+            // "$2,059.07"; the full form (tooltips/headlines) always keeps grouped cents.
+            if abs(value) >= 1000, style != .full {
+                return "$" + value.formatted(.number.notation(.compactName).precision(.fractionLength(0...1)).locale(locale))
+            }
             switch style {
             case .tray:
-                // Shortest: whole dollars under $1k ("$130"), abbreviated above ("$1.2M").
-                if abs(value) >= 1000 {
-                    return "$" + value.formatted(.number.notation(.compactName).precision(.fractionLength(0...1)).locale(locale))
-                }
+                // Shortest below $1k: whole dollars ("$130").
                 return "$" + value.formatted(.number.precision(.fractionLength(0)).locale(locale))
-            case .row:
-                // Abbreviate four figures and up ("$2.1K") so the row can't carry "$2,059.07" beside a
-                // token count — one decimal, matching the token counts next to it; full cents below $1k.
-                if abs(value) >= 1000 {
-                    return "$" + value.formatted(.number.notation(.compactName).precision(.fractionLength(0...1)).locale(locale))
-                }
-                return Formatters.currency(value, fractionDigits: 2)
-            case .full:
+            case .row, .full:
+                // Full cents below $1k; the row's token-count neighbor stays readable.
                 return Formatters.currency(value, fractionDigits: 2)
             }
         case .count:

@@ -8,10 +8,10 @@ final class UsageTrendTests: XCTestCase {
     func testAppendUsageTrendZeroFillsTheCalendarWindow() throws {
         var lines: [MetricLine] = []
         SpendTileMapper.appendUsageTrend(
-            CcusageDailyUsage(daily: [
-                CcusageDay(date: "2026-06-21", totalTokens: 222_000_000, costUSD: nil),
-                CcusageDay(date: "2026-06-19", totalTokens: 500, costUSD: nil),
-                CcusageDay(date: "2026-06-20", totalTokens: 1_500_000, costUSD: nil)
+            DailyUsageSeries(daily: [
+                DailyUsageEntry(date: "2026-06-21", totalTokens: 222_000_000, costUSD: nil),
+                DailyUsageEntry(date: "2026-06-19", totalTokens: 500, costUSD: nil),
+                DailyUsageEntry(date: "2026-06-20", totalTokens: 1_500_000, costUSD: nil)
             ]),
             to: &lines,
             now: date(2026, 6, 21),
@@ -48,9 +48,9 @@ final class UsageTrendTests: XCTestCase {
         // collapsing the two active days into neighbors.
         var lines: [MetricLine] = []
         SpendTileMapper.appendUsageTrend(
-            CcusageDailyUsage(daily: [
-                CcusageDay(date: "2026-06-19", totalTokens: 500, costUSD: nil),
-                CcusageDay(date: "2026-06-21", totalTokens: 222_000_000, costUSD: nil)
+            DailyUsageSeries(daily: [
+                DailyUsageEntry(date: "2026-06-19", totalTokens: 500, costUSD: nil),
+                DailyUsageEntry(date: "2026-06-21", totalTokens: 222_000_000, costUSD: nil)
             ]),
             to: &lines, now: date(2026, 6, 21), note: "n"
         )
@@ -67,7 +67,7 @@ final class UsageTrendTests: XCTestCase {
         // idle days are zero bars rather than the chart stopping at the last active day.
         var lines: [MetricLine] = []
         SpendTileMapper.appendUsageTrend(
-            CcusageDailyUsage(daily: [CcusageDay(date: "2026-06-19", totalTokens: 500, costUSD: nil)]),
+            DailyUsageSeries(daily: [DailyUsageEntry(date: "2026-06-19", totalTokens: 500, costUSD: nil)]),
             to: &lines, now: date(2026, 6, 21), note: "n"
         )
 
@@ -81,11 +81,11 @@ final class UsageTrendTests: XCTestCase {
     func testTrendDropsDaysOlderThanTheWindow() {
         // 40 distinct days (May 1–31, then June 1–9) with today = 6/9. The window is the 31 days ending
         // today (5/10 … 6/9), so May 1–9 fall outside it and are dropped.
-        var daily = (1...31).map { CcusageDay(date: String(format: "2026-05-%02d", $0), totalTokens: $0 * 1000, costUSD: nil) }
-        daily += (1...9).map { CcusageDay(date: String(format: "2026-06-%02d", $0), totalTokens: $0 * 1000, costUSD: nil) }
+        var daily = (1...31).map { DailyUsageEntry(date: String(format: "2026-05-%02d", $0), totalTokens: $0 * 1000, costUSD: nil) }
+        daily += (1...9).map { DailyUsageEntry(date: String(format: "2026-06-%02d", $0), totalTokens: $0 * 1000, costUSD: nil) }
 
         var lines: [MetricLine] = []
-        SpendTileMapper.appendUsageTrend(CcusageDailyUsage(daily: daily), to: &lines, now: date(2026, 6, 9), note: "n")
+        SpendTileMapper.appendUsageTrend(DailyUsageSeries(daily: daily), to: &lines, now: date(2026, 6, 9), note: "n")
 
         guard case .chart(_, let points, _) = lines.first else { return XCTFail("expected a chart line") }
         XCTAssertEqual(points.count, 31)
@@ -98,9 +98,9 @@ final class UsageTrendTests: XCTestCase {
         // one bar carrying their summed tokens, not two bars splitting it.
         var lines: [MetricLine] = []
         SpendTileMapper.appendUsageTrend(
-            CcusageDailyUsage(daily: [
-                CcusageDay(date: "20260620", totalTokens: 1000, costUSD: nil),
-                CcusageDay(date: "2026-06-20", totalTokens: 500, costUSD: nil)
+            DailyUsageSeries(daily: [
+                DailyUsageEntry(date: "20260620", totalTokens: 1000, costUSD: nil),
+                DailyUsageEntry(date: "2026-06-20", totalTokens: 500, costUSD: nil)
             ]),
             to: &lines, now: date(2026, 6, 20), note: "n"
         )
@@ -113,12 +113,12 @@ final class UsageTrendTests: XCTestCase {
     func testAppendUsageTrendSkippedWhenWindowHasNoUsage() {
         // No rows at all, and rows that are all zero, both leave "No data" rather than a flat zero chart.
         var empty: [MetricLine] = []
-        SpendTileMapper.appendUsageTrend(CcusageDailyUsage(daily: []), to: &empty, now: date(2026, 6, 21), note: "n")
+        SpendTileMapper.appendUsageTrend(DailyUsageSeries(daily: []), to: &empty, now: date(2026, 6, 21), note: "n")
         XCTAssertTrue(empty.isEmpty, "no rows means no chart")
 
         var allZero: [MetricLine] = []
         SpendTileMapper.appendUsageTrend(
-            CcusageDailyUsage(daily: [CcusageDay(date: "2026-06-20", totalTokens: 0, costUSD: nil)]),
+            DailyUsageSeries(daily: [DailyUsageEntry(date: "2026-06-20", totalTokens: 0, costUSD: nil)]),
             to: &allZero, now: date(2026, 6, 21), note: "n"
         )
         XCTAssertTrue(allZero.isEmpty, "a fully idle window has no trend to draw")

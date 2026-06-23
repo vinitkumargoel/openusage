@@ -11,7 +11,7 @@ enum ResetDisplayMode: String, Hashable, Sendable, CaseIterable {
     var label: String {
         switch self {
         case .relative: return "Countdown"
-        case .absolute: return "Exact time"
+        case .absolute: return "Exact Time"
         }
     }
 

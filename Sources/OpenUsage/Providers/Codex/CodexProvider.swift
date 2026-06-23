@@ -84,22 +84,13 @@ final class CodexProvider: ProviderRuntime {
         )
         var mapped = try CodexUsageMapper.mapUsageResponse(response, resetCredits: resetCredits, now: now())
 
-        let since = CcusageRunner.sinceString(daysBack: 30, from: now())
-        let tokenUsage = await ccusageRunner.query(provider: .codex, since: since, homePath: authStore.codexHome())
-        if case .success(let usage) = tokenUsage {
-            SpendTileMapper.appendTokenUsage(usage, to: &mapped.lines, now: now())
-            SpendTileMapper.appendUsageTrend(usage, to: &mapped.lines, now: now(),
-                                             note: "Estimated from local logs at API rates")
-        }
+        await SpendTileMapper.appendCcusageUsage(
+            using: ccusageRunner, provider: .codex, homePath: authStore.codexHome(),
+            to: &mapped.lines, now: now()
+        )
 
         MetricLine.appendNoDataIfNeeded(&mapped.lines)
-        return ProviderSnapshot(
-            providerID: provider.id,
-            displayName: provider.displayName,
-            plan: mapped.plan,
-            lines: mapped.lines,
-            refreshedAt: now()
-        )
+        return ProviderSnapshot.make(provider: provider, plan: mapped.plan, lines: mapped.lines, refreshedAt: now())
     }
 
     /// Fetches the on-demand reset-credit balance (and per-credit expiry) without ever failing the

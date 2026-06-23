@@ -59,12 +59,9 @@ enum CursorPricing {
 
     static func canonicalModel(for model: String) -> String? {
         let range = NSRange(model.startIndex..<model.endIndex, in: model)
-        for rule in aliasRules {
-            if rule.regex.firstMatch(in: model, range: range) != nil {
-                return rule.canonical
-            }
-        }
-        return nil
+        return aliasRules.first { rule in
+            rule.regex.firstMatch(in: model, range: range) != nil
+        }?.canonical
     }
 
     static func pricingEntry(for model: String) -> CursorPricingEntry? {

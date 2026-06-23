@@ -27,16 +27,6 @@ enum CcusageRunnerKind: CaseIterable, Sendable {
     }
 }
 
-struct CcusageDay: Hashable, Sendable {
-    var date: String
-    var totalTokens: Int
-    var costUSD: Double?
-}
-
-struct CcusageDailyUsage: Hashable, Sendable {
-    var daily: [CcusageDay]
-}
-
 enum CcusageRunnerError: Error, LocalizedError, Equatable {
     case noRunner
     case failed(String)
@@ -96,11 +86,11 @@ struct CcusageRunner {
     /// whose reason becomes the batch's `lastError`. A timeout is thrown (not returned) so the caller
     /// stops trying fallbacks — matching the Tauri host's "skip fallbacks on timeout".
     private enum Attempt {
-        case success(CcusageDailyUsage)
+        case success(DailyUsageSeries)
         case failed(CcusageRunnerError)
     }
 
-    func query(provider: CcusageProvider, since: String, homePath: String? = nil) async -> Result<CcusageDailyUsage, CcusageRunnerError> {
+    func query(provider: CcusageProvider, since: String, homePath: String? = nil) async -> Result<DailyUsageSeries, CcusageRunnerError> {
         let environment = ccusageEnvironment(provider: provider, homePath: homePath)
         var lastError: CcusageRunnerError = .noRunner
         // The cached runner kind already tried (and failed) this pass, so the fallback loop skips it
@@ -352,7 +342,7 @@ struct CcusageRunner {
         return nested
     }
 
-    static func parseOutput(_ stdout: String) -> CcusageDailyUsage? {
+    static func parseOutput(_ stdout: String) -> DailyUsageSeries? {
         guard let jsonText = extractLastJSONValue(stdout),
               let data = jsonText.data(using: .utf8),
               let raw = try? JSONSerialization.jsonObject(with: data)
@@ -370,7 +360,7 @@ struct CcusageRunner {
             return nil
         }
 
-        let days = dailyRaw.compactMap { entry -> CcusageDay? in
+        let days = dailyRaw.compactMap { entry -> DailyUsageEntry? in
             guard let object = entry as? [String: Any],
                   let date = object["date"] as? String
             else {
@@ -378,10 +368,10 @@ struct CcusageRunner {
             }
             let totalTokens = readInt(object["totalTokens"]) ?? 0
             let costUSD = readDouble(object["totalCost"]) ?? readDouble(object["costUSD"])
-            return CcusageDay(date: date, totalTokens: totalTokens, costUSD: costUSD)
+            return DailyUsageEntry(date: date, totalTokens: totalTokens, costUSD: costUSD)
         }
 
-        return CcusageDailyUsage(daily: days)
+        return DailyUsageSeries(daily: days)
     }
 
     static func extractLastJSONValue(_ stdout: String) -> String? {

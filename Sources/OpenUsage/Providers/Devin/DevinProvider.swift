@@ -89,13 +89,7 @@ final class DevinProvider: ProviderRuntime {
     }
 
     private func snapshot(from mapped: DevinMappedUsage) -> ProviderSnapshot {
-        ProviderSnapshot(
-            providerID: provider.id,
-            displayName: provider.displayName,
-            plan: mapped.plan,
-            lines: mapped.lines,
-            refreshedAt: now()
-        )
+        ProviderSnapshot.make(provider: provider, plan: mapped.plan, lines: mapped.lines, refreshedAt: now())
     }
 }
 

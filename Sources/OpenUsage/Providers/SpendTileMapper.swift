@@ -4,7 +4,7 @@ import Foundation
 /// Every spend-tracking provider funnels through here so the tiles render identically regardless of
 /// source: Claude / Codex / Grok feed token/cost from their CLI logs (estimated dollars, so the ⓘ),
 /// Cursor feeds server-priced dollars from its CSV export (`estimated: false`, no ⓘ). The data shape
-/// (`CcusageDailyUsage`) is the ccusage runner's output, reused as a neutral per-day carrier.
+/// (`DailyUsageSeries`) is a provider-neutral per-day carrier shared by every source.
 enum SpendTileMapper {
     /// Append the three spend tiles (Today / Yesterday / Last 30 Days). Callers only invoke this once the
     /// source was actually read, so a period with no usage is a real, measured zero — it renders
@@ -13,7 +13,7 @@ enum SpendTileMapper {
     /// `estimated` flags the dollar value as a local estimate (drives the ⓘ); pass `false` for
     /// server-priced sources like Cursor.
     static func appendTokenUsage(
-        _ usage: CcusageDailyUsage,
+        _ usage: DailyUsageSeries,
         to lines: inout [MetricLine],
         now: Date = Date(),
         estimated: Bool = true
@@ -41,10 +41,28 @@ enum SpendTileMapper {
     /// that day. Tokens are always measured (no estimate flag), so the chart needs only the per-day
     /// counts plus a source note. Appends nothing when the whole window is idle, so a source with no
     /// usage leaves "No data" rather than a flat row of zero bars.
-    static func appendUsageTrend(_ usage: CcusageDailyUsage, to lines: inout [MetricLine], now: Date = Date(), note: String) {
+    static func appendUsageTrend(_ usage: DailyUsageSeries, to lines: inout [MetricLine], now: Date = Date(), note: String) {
         let points = trendPoints(usage, now: now)
         guard !points.isEmpty else { return }
         lines.append(.chart(label: "Usage Trend", points: points, note: note))
+    }
+
+    /// Query `ccusage` for the last 30 days and, on success, append the spend tiles + usage-trend chart.
+    /// Claude and Codex both source their spend from `ccusage` and handle the result identically, so the
+    /// query → append sequence (and its "estimated from local logs" note) lives here once.
+    static func appendCcusageUsage(
+        using runner: CcusageRunner,
+        provider: CcusageProvider,
+        homePath: String?,
+        to lines: inout [MetricLine],
+        now: Date
+    ) async {
+        let since = CcusageRunner.sinceString(daysBack: 30, from: now)
+        guard case .success(let usage) = await runner.query(provider: provider, since: since, homePath: homePath) else {
+            return
+        }
+        appendTokenUsage(usage, to: &lines, now: now)
+        appendUsageTrend(usage, to: &lines, now: now, note: "Estimated from local logs at API rates")
     }
 
     /// Per-day token points across the queried window (today + the previous 30 days), oldest first.
@@ -54,7 +72,7 @@ enum SpendTileMapper {
     /// place instead of collapsing two non-adjacent days into neighbors, and the cap is calendar days,
     /// not active ones. Returns empty when nothing was used in the window — there's no trend to draw.
     /// Each point carries a "Jun 21" axis label and a pre-formatted "222M tokens" readout.
-    private static func trendPoints(_ usage: CcusageDailyUsage, now: Date) -> [MetricChartPoint] {
+    private static func trendPoints(_ usage: DailyUsageSeries, now: Date) -> [MetricChartPoint] {
         var tokensByDay: [String: Double] = [:]
         for day in usage.daily {
             let tokens = Double(day.totalTokens)
@@ -110,7 +128,7 @@ enum SpendTileMapper {
         return nil
     }
 
-    private static func dayUsageLine(label: String, entry: CcusageDay?, estimated: Bool) -> MetricLine {
+    private static func dayUsageLine(label: String, entry: DailyUsageEntry?, estimated: Bool) -> MetricLine {
         .values(label: label, values: spendValues(tokens: entry?.totalTokens ?? 0, costUSD: entry?.costUSD, estimated: estimated))
     }
 

@@ -26,6 +26,19 @@ struct ProviderSnapshot: Hashable, Sendable, Codable {
         lines.first { $0.label == label }
     }
 
+    /// The success-path counterpart to `error(provider:message:)`: derives `providerID`/`displayName`
+    /// from the provider so every runtime builds its snapshot the same way (`refreshedAt` is required
+    /// so each call passes its own `now()`).
+    static func make(provider: Provider, plan: String?, lines: [MetricLine], refreshedAt: Date) -> ProviderSnapshot {
+        ProviderSnapshot(
+            providerID: provider.id,
+            displayName: provider.displayName,
+            plan: plan,
+            lines: lines,
+            refreshedAt: refreshedAt
+        )
+    }
+
     static func error(provider: Provider, message: String) -> ProviderSnapshot {
         ProviderSnapshot(
             providerID: provider.id,

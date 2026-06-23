@@ -275,7 +275,7 @@ final class LayoutStore {
     var pinnedCount: Int { pinnedMetricIDs.count }
 
     func pinnedCount(forProvider providerID: String) -> Int {
-        pinnedMetricIDs.reduce(0) { $0 + (registry.descriptor(id: $1)?.providerID == providerID ? 1 : 0) }
+        pinnedMetricIDs.count { registry.descriptor(id: $0)?.providerID == providerID }
     }
 
     /// Whether `descriptorID` can be newly pinned without breaking a cap. Already-pinned ids return

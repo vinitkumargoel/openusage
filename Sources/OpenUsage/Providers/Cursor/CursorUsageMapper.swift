@@ -171,7 +171,7 @@ enum CursorUsageMapper {
         usage: [String: Any],
         planName: String?,
         planInfoUnavailable: Bool
-    ) -> (Bool, String) {
+    ) -> (shouldFallback: Bool, message: String) {
         guard usage["enabled"] as? Bool != false else {
             return (false, "")
         }
@@ -182,14 +182,15 @@ enum CursorUsageMapper {
         let planUsageLimitMissing = hasPlanUsage && !hasPlanUsageLimit
         let hasTotalUsagePercent = planUsage.flatMap { ProviderParse.number($0["totalPercentUsed"]) } != nil
         let normalizedPlan = planName?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        let planUsageUnusable = !hasPlanUsage || planUsageLimitMissing
 
-        if (!hasPlanUsage || planUsageLimitMissing) && normalizedPlan == "enterprise" {
+        if planUsageUnusable && normalizedPlan == "enterprise" {
             return (true, "Enterprise usage data unavailable. Try again later.")
         }
-        if (!hasPlanUsage || planUsageLimitMissing) && normalizedPlan == "team" {
+        if planUsageUnusable && normalizedPlan == "team" {
             return (true, "Team request-based usage data unavailable. Try again later.")
         }
-        if (!hasPlanUsage || planUsageLimitMissing) && !hasTotalUsagePercent && normalizedPlan.isEmpty && planInfoUnavailable {
+        if planUsageUnusable && !hasTotalUsagePercent && normalizedPlan.isEmpty && planInfoUnavailable {
             return (true, "Cursor request-based usage data unavailable. Try again later.")
         }
 
@@ -204,7 +205,7 @@ enum CursorUsageMapper {
     }
 
     /// Append the shared Today / Yesterday / Last 30 Days spend tiles from Cursor's CSV rows. The rows
-    /// are aggregated into one local-calendar-day `CcusageDailyUsage` and handed to `SpendTileMapper`
+    /// are aggregated into one local-calendar-day `DailyUsageSeries` and handed to `SpendTileMapper`
     /// — the same builder the Claude/Codex/Grok tiles use — so the output is identical apart from the
     /// `estimated: false` flag (Cursor spend is server-priced, so its dollars carry no ⓘ). Callers only
     /// invoke this when the CSV fetched and parsed, so a failure appends nothing and the tiles read
@@ -222,13 +223,13 @@ enum CursorUsageMapper {
         // Sum raw dollars per day, then snap to whole cents once — rounding per row would accumulate
         // sub-cent drift across a busy day.
         let daily = tokensByDay.keys.sorted(by: >).map { day in
-            CcusageDay(
+            DailyUsageEntry(
                 date: day,
                 totalTokens: tokensByDay[day] ?? 0,
                 costUSD: Double(CursorPricing.toCents(costByDay[day] ?? 0)) / 100
             )
         }
-        SpendTileMapper.appendTokenUsage(CcusageDailyUsage(daily: daily), to: &lines, now: now, estimated: false)
+        SpendTileMapper.appendTokenUsage(DailyUsageSeries(daily: daily), to: &lines, now: now, estimated: false)
     }
 
     private static func dayKey(from date: Date, calendar: Calendar) -> String {

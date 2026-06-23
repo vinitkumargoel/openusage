@@ -74,25 +74,27 @@ final class CursorProvider: ProviderRuntime {
         guard let usage = ProviderParse.jsonObject(usageResponse.body) else {
             throw CursorUsageError.invalidResponse
         }
+        // The access token may have rotated during the usage fetch's refresh-and-retry; read the live one.
+        let currentToken = authState.accessToken ?? accessToken
 
-        let (planName, planInfoUnavailable) = await fetchPlanName(accessToken: authState.accessToken ?? accessToken)
+        let (planName, planInfoUnavailable) = await fetchPlanName(accessToken: currentToken)
         let fallback = CursorUsageMapper.shouldUseRequestBasedFallback(
             usage: usage,
             planName: planName,
             planInfoUnavailable: planInfoUnavailable
         )
-        if fallback.0 {
+        if fallback.shouldFallback {
             let mapped = try await requestBasedResult(
-                accessToken: authState.accessToken ?? accessToken,
+                accessToken: currentToken,
                 planName: planName,
-                unavailableMessage: fallback.1
+                unavailableMessage: fallback.message
             )
             return snapshot(mapped)
         }
 
         if shouldTryGenericRequestFallback(usage: usage) {
             if let mapped = try? await requestBasedResult(
-                accessToken: authState.accessToken ?? accessToken,
+                accessToken: currentToken,
                 planName: planName,
                 unavailableMessage: "Cursor request-based usage data unavailable. Try again later."
             ) {
@@ -100,8 +102,8 @@ final class CursorProvider: ProviderRuntime {
             }
         }
 
-        let creditGrants = await fetchCreditGrants(accessToken: authState.accessToken ?? accessToken)
-        let stripeResponse = try? await usageClient.fetchStripeBalance(accessToken: authState.accessToken ?? accessToken)
+        let creditGrants = await fetchCreditGrants(accessToken: currentToken)
+        let stripeResponse = try? await usageClient.fetchStripeBalance(accessToken: currentToken)
         let stripeBalanceCents = CursorUsageMapper.stripeBalanceCents(from: stripeResponse ?? nil)
         var mapped = try CursorUsageMapper.mapUsage(
             usage: usage,
@@ -109,7 +111,7 @@ final class CursorProvider: ProviderRuntime {
             creditGrants: creditGrants,
             stripeBalanceCents: stripeBalanceCents
         )
-        await appendSpendLines(to: &mapped.lines, accessToken: authState.accessToken ?? accessToken)
+        await appendSpendLines(to: &mapped.lines, accessToken: currentToken)
         return snapshot(mapped)
     }
 
@@ -229,22 +231,15 @@ final class CursorProvider: ProviderRuntime {
 
     private func shouldTryGenericRequestFallback(usage: [String: Any]) -> Bool {
         guard usage["enabled"] as? Bool != false,
-              let planUsage = usage["planUsage"] as? [String: Any],
-              ProviderParse.number(planUsage["limit"]) == nil,
-              ProviderParse.number(planUsage["totalPercentUsed"]) == nil
+              let planUsage = usage["planUsage"] as? [String: Any]
         else {
             return false
         }
-        return true
+        return ProviderParse.number(planUsage["limit"]) == nil
+            && ProviderParse.number(planUsage["totalPercentUsed"]) == nil
     }
 
     private func snapshot(_ mapped: CursorMappedUsage) -> ProviderSnapshot {
-        ProviderSnapshot(
-            providerID: provider.id,
-            displayName: provider.displayName,
-            plan: mapped.plan,
-            lines: mapped.lines,
-            refreshedAt: now()
-        )
+        ProviderSnapshot.make(provider: provider, plan: mapped.plan, lines: mapped.lines, refreshedAt: now())
     }
 }

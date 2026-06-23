@@ -63,22 +63,13 @@ final class ClaudeProvider: ProviderRuntime {
             mapped = try await fetchLiveUsage(state: &state)
         }
 
-        let since = CcusageRunner.sinceString(daysBack: 30, from: now())
-        let tokenUsage = await ccusageRunner.query(provider: .claude, since: since, homePath: authStore.claudeHomeOverride())
-        if case .success(let usage) = tokenUsage {
-            SpendTileMapper.appendTokenUsage(usage, to: &mapped.lines, now: now())
-            SpendTileMapper.appendUsageTrend(usage, to: &mapped.lines, now: now(),
-                                             note: "Estimated from local logs at API rates")
-        }
+        await SpendTileMapper.appendCcusageUsage(
+            using: ccusageRunner, provider: .claude, homePath: authStore.claudeHomeOverride(),
+            to: &mapped.lines, now: now()
+        )
 
         MetricLine.appendNoDataIfNeeded(&mapped.lines)
-        return ProviderSnapshot(
-            providerID: provider.id,
-            displayName: provider.displayName,
-            plan: mapped.plan,
-            lines: mapped.lines,
-            refreshedAt: now()
-        )
+        return ProviderSnapshot.make(provider: provider, plan: mapped.plan, lines: mapped.lines, refreshedAt: now())
     }
 
     private func fetchLiveUsage(state: inout ClaudeCredentialState) async throws -> ClaudeMappedUsage {
