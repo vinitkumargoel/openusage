@@ -213,21 +213,26 @@ struct WidgetData: Hashable {
         return (valuePrefix ?? "") + format(displayedValue)
     }
 
-    /// The menu-bar (tray) reading: a bounded metric glances as a percentage (regardless of unit, so
-    /// Cursor Credits reads "67%", not "$12,923"); an unbounded one shows its selected value compacted
-    /// (1.2M tokens / $3.4K) through the same formatter the popover uses. A status badge with no number
-    /// (e.g. Grok "Disabled") shows its text rather than a misleading "0".
+    /// The menu-bar (tray) reading: bounded metrics stay unit-aware (percent meters as %, dollar meters
+    /// as compact dollars, count meters as compact counts) while still honoring the global Used/Left
+    /// mode through `displayedValue`. Unbounded rows show their selected value compacted through the same
+    /// formatter the popover uses. A status badge with no number (e.g. Grok "Disabled") shows its text
+    /// rather than a misleading "0".
     var menuBarValue: String {
         guard hasData else { return valueText }
         if let limit, limit > 0 {
-            // The tray glance is always 0...100%: clamp both ends so neither a negative sample nor an
-            // over-limit one (e.g. a dollar meter past its cap, rendered here as a percentage) ever
-            // reads "-5%" or "105%" beside the icon. Over-limit is shown by the meter's color/spent
-            // state in the popover, not by the tray number.
-            let percent = min(100, max(0, Int((displayedValue / limit * 100).rounded())))
-            return "\(percent)%"
+            if kind == .percent {
+                // Percent is the only bounded unit that should collapse to a tray percentage. Clamp both
+                // ends so a provider sample can never print "-5%" or "105%" beside the icon.
+                let percent = min(100, max(0, Int((displayedValue / limit * 100).rounded())))
+                return "\(percent)%"
+            }
+            return MetricFormatter.number(displayedValue, kind: kind, style: .tray)
         }
         if let first = selectedValues.first {
+            if title == "Rate Limit Resets", first.kind == .count {
+                return "\(MetricFormatter.number(first.number, kind: .count, style: .tray)) resets"
+            }
             return MetricFormatter.string(for: first, style: .tray)
         }
         if let valueTextOverride { return valueTextOverride }

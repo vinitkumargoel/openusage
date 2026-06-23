@@ -95,15 +95,16 @@ final class MenuBarContentTests: XCTestCase {
         XCTAssertEqual(content.groups[0].metrics.map(\.label), ["T", "M"])
     }
 
-    func testBoundedReadsAsPercentUnboundedStaysAValue() {
-        // "Everything with a bar" → a percentage for a quick glance (Cursor Credits: 12000/18000 ≈ 67%);
-        // unbounded values stay a real (compacted) number, never a percentage.
+    func testBoundedTrayValuesStayUnitAware() {
+        // Percent meters still read as percentages, while bounded dollars/counts keep their natural
+        // unit in the strip instead of collapsing to "used / limit" percentages.
+        let usage = percent("a.usage", "Usage", 67)
         let credits = boundedDollars("a.credits", "Credits", used: 12000, limit: 18000)
+        let requests = boundedCount("a.requests", "Requests", used: 412, limit: 500)
         let spend = unbounded("a.spend", "Spend")   // unbounded $42
-        let content = MenuBarContentBuilder.build(groups: [group("a", credits, spend)], data: { $0.sample })
+        let content = MenuBarContentBuilder.build(groups: [group("a", usage, credits, requests, spend)], data: { $0.sample })
 
-        XCTAssertEqual(content.groups[0].metrics[0].value, "67%")
-        XCTAssertEqual(content.groups[0].metrics[1].value, "$42")
+        XCTAssertEqual(content.groups[0].metrics.map(\.value), ["67%", "$12K", "412", "$42"])
     }
 
     func testUnboundedNumbersAreCompacted() {
@@ -138,6 +139,10 @@ final class MenuBarContentTests: XCTestCase {
 
     private func boundedDollars(_ id: String, _ label: String, used: Double, limit: Double) -> WidgetDescriptor {
         descriptor(id, label, WidgetData(title: label, icon: .symbol("gauge"), kind: .dollars, used: used, limit: limit))
+    }
+
+    private func boundedCount(_ id: String, _ label: String, used: Double, limit: Double) -> WidgetDescriptor {
+        descriptor(id, label, WidgetData(title: label, icon: .symbol("gauge"), kind: .count, used: used, limit: limit))
     }
 
     private func unbounded(_ id: String, _ label: String, _ used: Double = 42) -> WidgetDescriptor {

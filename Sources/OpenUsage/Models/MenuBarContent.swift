@@ -35,7 +35,7 @@ struct MenuBarContent: Equatable {
     var isEmpty: Bool { groups.isEmpty }
 
     /// VoiceOver summary for the rendered strip image, e.g.
-    /// "Claude Session 41%, Weekly 12%; Cursor Credits 67%".
+    /// "Claude Session 41%, Weekly 12%; Cursor Credits $12".
     var accessibilityText: String {
         groups.map { group in
             let metrics = group.metrics.map { "\($0.label) \($0.value)" }.joined(separator: ", ")

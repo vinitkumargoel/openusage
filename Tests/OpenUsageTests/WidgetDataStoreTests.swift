@@ -194,7 +194,8 @@ final class WidgetDataStoreTests: XCTestCase {
 
     func testRateLimitResetsTileShowsCountInTrayAndPopover() async {
         // Regression (#641): the menu-bar tile and the popover row resolve from one raw number, so a
-        // pinned tile can't read "0" while the popover reads "1". The count is carried raw.
+        // pinned tile can't read "0" while the popover reads "1". The popover keeps Codex's "available"
+        // wording, while the tighter tray reads "resets".
         let provider = Provider(id: "codex", displayName: "Codex", icon: .providerMark("codex"))
         let descriptor = WidgetDescriptor.values(
             id: "codex.rateLimitResets",
@@ -209,7 +210,7 @@ final class WidgetDataStoreTests: XCTestCase {
                 providerID: provider.id,
                 displayName: provider.displayName,
                 lines: [.values(label: "Rate Limit Resets",
-                                values: [MetricValue(number: 1, kind: .count)])]
+                                values: [MetricValue(number: 1, kind: .count, label: "available")])]
             )
         )
         let defaults = makeUserDefaults("codex-resets")
@@ -224,8 +225,49 @@ final class WidgetDataStoreTests: XCTestCase {
         let data = store.data(for: descriptor)
         XCTAssertTrue(data.hasData)
         XCTAssertFalse(data.isBounded)
-        XCTAssertEqual(data.unboundedDetail, "1")   // popover row — bare count, no unit label
-        XCTAssertEqual(data.menuBarValue, "1")      // tray — the real count, never "0"
+        XCTAssertEqual(data.unboundedDetail, "1 available")
+        XCTAssertEqual(data.menuBarValue, "1 resets")
+    }
+
+    func testBoundedDollarAndCountTrayValuesHonorMeterStyleWithoutPercentConversion() async {
+        let provider = Provider(id: "cursor", displayName: "Cursor", icon: .providerMark("cursor"))
+        let credits = WidgetDescriptor.boundedDollars(id: "cursor.credits", provider: provider, title: "Credits", limit: 100)
+        let requests = WidgetDescriptor.boundedCount(
+            id: "cursor.requests",
+            provider: provider,
+            title: "Requests",
+            limit: 500,
+            suffix: "requests",
+            periodDurationMs: CursorUsageMapper.billingPeriodMs
+        )
+        let runtime = TestProviderRuntime(
+            provider: provider,
+            descriptors: [credits, requests],
+            snapshot: ProviderSnapshot(
+                providerID: provider.id,
+                displayName: provider.displayName,
+                lines: [
+                    .progress(label: "Credits", used: 12.48, limit: 20, format: .dollars),
+                    .progress(label: "Requests", used: 412, limit: 500, format: .count(suffix: "requests"))
+                ]
+            )
+        )
+        let defaults = makeUserDefaults("cursor-tray-units")
+        let store = WidgetDataStore(
+            registry: WidgetRegistry(providers: [provider], descriptors: [credits, requests]),
+            providers: [runtime],
+            cache: ProviderSnapshotCache(userDefaults: defaults, storageKey: "snapshots", ttl: 600, now: { Date() }),
+            defaults: defaults
+        )
+        await store.refreshAll()
+
+        store.meterStyle = .used
+        XCTAssertEqual(store.data(for: credits).menuBarValue, "$12")
+        XCTAssertEqual(store.data(for: requests).menuBarValue, "412")
+
+        store.meterStyle = .remaining
+        XCTAssertEqual(store.data(for: credits).menuBarValue, "$8")
+        XCTAssertEqual(store.data(for: requests).menuBarValue, "88")
     }
 
     func testUncappedExtraUsageRendersCompactAndUnbounded() async {
