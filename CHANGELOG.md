@@ -1,5 +1,53 @@
 # Changelog
 
+## v0.7.0-beta.12
+
+### New Features
+- Add "Always Show Pacing" setting for on-track meters ([#707](https://github.com/robinebers/openusage/pull/707)) by @robinebers
+- Extend Usage Trend sparkline to Cursor and Grok ([#698](https://github.com/robinebers/openusage/pull/698)) by @robinebers
+- Default Reduce Transparency on for readability ([#691](https://github.com/robinebers/openusage/pull/691)) by @robinebers
+- Add provider-header drag handle ([#677](https://github.com/robinebers/openusage/pull/677)) by @robinebers
+- Add Usage Trend sparkline for Claude and Codex ([#669](https://github.com/robinebers/openusage/pull/669)) by @davidarny
+
+### Bug Fixes
+- Fix metric value tooltips ([#710](https://github.com/robinebers/openusage/pull/710)) by @robinebers
+- Reorder default metric customization ([#711](https://github.com/robinebers/openusage/pull/711)) by @robinebers
+- Fix Codex session usage percent ([#708](https://github.com/robinebers/openusage/pull/708)) by @robinebers
+- Fix menu bar metric units ([#709](https://github.com/robinebers/openusage/pull/709)) by @robinebers
+- Clamp quota percent meters to 0–100 ([#706](https://github.com/robinebers/openusage/pull/706)) by @robinebers
+- Scope snapshot freshness to the running session ([#702](https://github.com/robinebers/openusage/pull/702)) by @robinebers
+- Top-leading back nav on Customize/Settings; unify Customize header ([#699](https://github.com/robinebers/openusage/pull/699)) by @robinebers
+- Unify Extra Usage number formatting via MetricFormatter ([#695](https://github.com/robinebers/openusage/pull/695)) by @robinebers
+- Restore estimate note on spend-row ⓘ tooltip ([#692](https://github.com/robinebers/openusage/pull/692)) by @robinebers
+
+### Refactor
+- Streamline Swift codebase for release (incl. #690) ([#693](https://github.com/robinebers/openusage/pull/693)) by @robinebers
+
+### Chores
+- Document AGENTS.md as agent instruction source by @robinebers
+
+---
+
+### Changelog
+**Full Changelog**: [v0.7.0-beta.11...v0.7.0-beta.12](https://github.com/robinebers/openusage/compare/v0.7.0-beta.11...v0.7.0-beta.12)
+
+- [ab503ec](https://github.com/robinebers/openusage/commit/ab503ec7d6fbeb2bdc7ec7b48056b8708da7a292) fix metric value tooltips (#710) by @robinebers
+- [0738d38](https://github.com/robinebers/openusage/commit/0738d386c183b0b789502fffee319d35a55d64ba) Reorder default metric customization (#711) by @robinebers
+- [a4cba27](https://github.com/robinebers/openusage/commit/a4cba27a11acd9cec7148eaa6ecb4d1b6705b964) Fix Codex session usage percent (#708) by @robinebers
+- [9afa03f](https://github.com/robinebers/openusage/commit/9afa03f6be6b64112b6664aaa42dfbda2460b393) Document AGENTS.md as agent instruction source by @robinebers
+- [e40f37d](https://github.com/robinebers/openusage/commit/e40f37d68b1eb9c1c4c62c376b537bc450faca9c) Fix menu bar metric units (#709) by @robinebers
+- [da039fe](https://github.com/robinebers/openusage/commit/da039fe8ba10a7ed6cf71a08d73c1e27bc8647f1) feat(dashboard): add "Always Show Pacing" setting for on-track meters (#685) (#707) by @robinebers
+- [3664118](https://github.com/robinebers/openusage/commit/36641184e2808195a9882433404d0eae20fc6b70) fix(metrics): clamp quota percent meters to 0–100 (#703) (#706) by @robinebers
+- [5faf25c](https://github.com/robinebers/openusage/commit/5faf25c311ca230e1c20d869606ce8bdc4b17de1) fix(cache): scope snapshot freshness to the running session (#697) (#702) by @robinebers
+- [f338734](https://github.com/robinebers/openusage/commit/f3387349e1c722b5b321e9ddc406ada17230600a) Top-leading back nav on Customize/Settings; unify Customize header (#699) by @robinebers
+- [b545135](https://github.com/robinebers/openusage/commit/b545135d862faaf7f150d49a605a969bb13730ca) feat(dashboard): extend Usage Trend sparkline to Cursor and Grok (#688) (#698) by @robinebers
+- [0da519b](https://github.com/robinebers/openusage/commit/0da519bb4a8e019922de37b4576d4d23183ecede) fix(format): unify Extra Usage number formatting via MetricFormatter (#658) (#695) by @robinebers
+- [f9a047d](https://github.com/robinebers/openusage/commit/f9a047d84a082642e044759fcbc51bec533aa6b7) refactor: streamline Swift codebase for release (incl. #690) (#693) by @robinebers
+- [bac1132](https://github.com/robinebers/openusage/commit/bac1132afe7ef795c7aad5337ab29a2a1ebd3e03) fix(dashboard): restore estimate note on spend-row ⓘ tooltip (#683) (#692) by @robinebers
+- [260542a](https://github.com/robinebers/openusage/commit/260542a5d8f8df86b1411252ef9a3e143ce1a78b) feat(settings): default Reduce Transparency on for readability (#691) by @robinebers
+- [8836031](https://github.com/robinebers/openusage/commit/8836031f238b977158c1099bc230a6bd9fae5e3d) feat(dashboard): add provider-header drag handle (#677) by @robinebers
+- [be801f1](https://github.com/robinebers/openusage/commit/be801f134bcdf1585e12678855bb15ed477ebe23) feat(dashboard): add Usage Trend sparkline for Claude and Codex (#669) by @davidarny
+
 ## v0.7.0-beta.11
 
 ### New Features
