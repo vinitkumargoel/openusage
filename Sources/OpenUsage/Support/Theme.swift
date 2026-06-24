@@ -33,23 +33,11 @@ enum Theme {
 
     // MARK: - Surfaces
 
-    /// The popover's opaque backdrop ("tray") behind the grouped cards. Deliberately a touch grayer
-    /// than pure white in light mode so the white cards read as raised boxes on it — the System
-    /// Settings look (`windowBackgroundColor` is too near-white for white cards to separate). A
-    /// near-black in dark mode. Exposed as an `NSColor` so the panel's AppKit backdrop
-    /// (`StatusItemController`) and the SwiftUI surface (`DashboardView.PopoverSurface`) are one color.
-    static let trayNSColor = NSColor(name: nil) { appearance in
-        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            ? NSColor(white: 0.12, alpha: 1)
-            : NSColor(white: 0.93, alpha: 1)
-    }
-    static let traySurface = Color(nsColor: trayNSColor)
-
     /// The opaque grouped-card color, shared by the live card fill and the lifted drag preview so a
-    /// dragged card is the exact same color as the cards it floats over. White over the gray tray in
-    /// light mode, a step lighter than the near-black tray in dark mode (no stock semantic color lifts
-    /// above the window background in dark, so the dark value is set explicitly); the hairline
-    /// `cardBorder` crisps the edge in both modes.
+    /// dragged card is the exact same color as the cards it floats over. White in light mode, a step
+    /// lighter than the frosted-glass backdrop in dark mode (no stock semantic color lifts above the
+    /// window background in dark, so the dark value is set explicitly); the hairline `cardBorder`
+    /// crisps the edge in both modes against the translucent popover surface.
     static let cardNSColor = NSColor(name: nil) { appearance in
         appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
             ? NSColor(white: 0.19, alpha: 1)

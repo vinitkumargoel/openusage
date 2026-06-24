@@ -168,9 +168,9 @@ struct DashboardView: View {
             // The resize dragger is a persistent bar at the very bottom — on every screen, including
             // Settings — separate from the footer above it. It never slides; the pages slide above it.
             .safeAreaInset(edge: .bottom, spacing: 0) { resizeDragger }
-            // Paint the opaque tray behind the content (and footer) so the whole popover reads as one
-            // solid panel. Goes on the outermost level so the footer, header buttons, and scroll
-            // content all sit on it.
+            // The backdrop is behind-window Liquid Glass (StatusItemController), so the root surface
+            // stays clear: the frosted glass shows through every region the content leaves unpainted —
+            // the footer, the resize grabber, and the gaps between the opaque cards.
             .background(PopoverSurface())
             .overlay(alignment: .topLeading) {
                 if let reorderLift {
@@ -364,10 +364,10 @@ struct DashboardView: View {
             .padding(.top, 8)
             .padding(.bottom, 10)
             .contentShape(Rectangle())
-            // The grabber sits on the opaque popover tray on every screen, so it reads the same on all
-            // three — no screen-specific backing. It used to get a `.bar` fill on Settings (which has no
-            // footer above it) to stand out against the old glass surface, but on the solid tray that
-            // rendered as a lighter strip than the rest of the panel, and only on Settings.
+            // The grabber sits on the shared frosted-glass backdrop on every screen, so it reads the
+            // same on all three — no screen-specific backing. It used to get a `.bar` fill on Settings
+            // (which has no footer above it) to stand out, but that rendered as a lighter strip than the
+            // rest of the panel, and only on Settings.
             .pointerStyle(.frameResize(position: .bottom))
             .gesture(
                 DragGesture(minimumDistance: 0, coordinateSpace: .global)
@@ -609,13 +609,13 @@ struct DashboardView: View {
     }
 }
 
-/// The popover's opaque backdrop tray, painted behind all content so the popover reads as one solid
-/// panel (Liquid Glass is reserved for the footer's chrome controls). Matches the AppKit panel
-/// backdrop (`StatusItemController`) — both `Theme.traySurface`. Never hit-tests, so it can't steal
-/// clicks from the content above it.
+/// The popover's root surface: intentionally clear. The translucent backdrop is the behind-window
+/// `NSVisualEffectView` in `StatusItemController`, so keeping SwiftUI clear here lets that frosted
+/// glass show through every unpainted region (the footer, the resize grabber, and the gaps between
+/// the opaque cards). Never hit-tests, so it can't steal clicks from the content above it.
 private struct PopoverSurface: View {
     var body: some View {
-        Theme.traySurface
+        Color.clear
             .allowsHitTesting(false)
     }
 }

@@ -136,24 +136,22 @@ final class StatusItemController: NSObject {
 
         let container = NSView()
 
-        // Opaque backdrop: the popover is always a solid panel — Liquid Glass is reserved for the
-        // footer's chrome controls, never the data region behind them. The box fills the whole
-        // window, so a screen-switch resize can't briefly reveal a transparent strip beneath the
-        // content-sized SwiftUI surface. `Theme.trayNSColor` tracks light/dark (and the forced
-        // appearance override) and matches the SwiftUI tray (`DashboardView.PopoverSurface`).
-        let backdrop = NSBox()
-        backdrop.boxType = .custom
-        backdrop.titlePosition = .noTitle
-        backdrop.borderWidth = 0
-        backdrop.cornerRadius = Self.cornerRadius
-        backdrop.contentViewMargins = .zero
-        backdrop.fillColor = Theme.trayNSColor
-        backdrop.autoresizingMask = [.width, .height]
-        backdrop.frame = container.bounds
+        // Liquid Glass backdrop: a behind-window vibrancy view samples the desktop (the frosted
+        // `NSPopover` material), so the footer — and every region the SwiftUI surface leaves unpainted
+        // (the gaps between the opaque cards, the resize grabber) — reads as translucent glass rather
+        // than a flat fill or a raw hole. This is the classic AppKit material, NOT the SwiftUI Liquid
+        // Glass APIs, so it renders the same whichever SDK the app is built against. Rounded via a
+        // resizable mask — a plain layer corner-radius leaves the window-server-composited blur square
+        // at the edges. `panel.appearance` (tracked by `appearanceObserver`) pins the light/dark mode.
+        let glass = NSVisualEffectView()
+        glass.material = .popover
+        glass.blendingMode = .behindWindow
+        glass.state = .active
+        glass.maskImage = Self.roundedMaskImage(radius: Self.cornerRadius)
+        glass.translatesAutoresizingMaskIntoConstraints = false
 
         let host = hostingController.view
-        host.frame = container.bounds
-        host.autoresizingMask = [.width, .height]
+        host.translatesAutoresizingMaskIntoConstraints = false
         host.wantsLayer = true
         // Redraw the SwiftUI content on every step of a live resize instead of stretching the layer's
         // cached contents (the default `.onSetNeedsDisplay`), which is what made the cards jitter while
@@ -163,8 +161,18 @@ final class StatusItemController: NSObject {
         host.layer?.cornerCurve = .continuous
         host.layer?.masksToBounds = true
 
-        container.addSubview(backdrop)
-        container.addSubview(host, positioned: .above, relativeTo: backdrop)
+        container.addSubview(glass)
+        container.addSubview(host, positioned: .above, relativeTo: glass)
+        NSLayoutConstraint.activate([
+            glass.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            glass.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            glass.topAnchor.constraint(equalTo: container.topAnchor),
+            glass.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            host.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            host.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            host.topAnchor.constraint(equalTo: container.topAnchor),
+            host.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+        ])
 
         // A plain container VC owns the backdrop; the hosting controller is its child so SwiftUI gets
         // a proper view-controller hierarchy. The panel itself is sized by `applyPanelSize`.
@@ -172,6 +180,21 @@ final class StatusItemController: NSObject {
         rootVC.view = container
         rootVC.addChild(hostingController)
         panel.contentViewController = rootVC
+    }
+
+    /// A stretchable rounded-rect mask for the behind-window glass: a plain layer corner radius leaves
+    /// the window-server blur square at the corners, so the vibrancy view is masked to the panel's
+    /// rounded shape instead. Cap insets keep the corners crisp as the panel resizes.
+    private static func roundedMaskImage(radius: CGFloat) -> NSImage {
+        let side = radius * 2 + 1
+        let image = NSImage(size: NSSize(width: side, height: side), flipped: false) { rect in
+            NSColor.black.setFill()
+            NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
+            return true
+        }
+        image.capInsets = NSEdgeInsets(top: radius, left: radius, bottom: radius, right: radius)
+        image.resizingMode = .stretch
+        return image
     }
 
     private func configureStatusItem() {

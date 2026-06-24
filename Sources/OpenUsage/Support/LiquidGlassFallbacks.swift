@@ -10,9 +10,9 @@ import SwiftUI
 /// distinction, the scroll view still scrolls. Nothing here hides a runtime error — each branch is a
 /// compile-time `#available` check, which is the intended way to back-deploy newer-SDK APIs.
 ///
-/// These gate purely on OS version. The popover surface itself is always opaque — `PopoverSurface`
-/// paints `Theme.traySurface` with opaque grouped cards over it — and Liquid Glass is reserved for
-/// the footer's chrome controls here, rendered over that solid backing (the normal in-window look).
+/// These gate purely on OS version. The popover backdrop is behind-window Liquid Glass (the frosted
+/// `NSVisualEffectView` in `StatusItemController`), with opaque grouped cards floating over it; the
+/// footer's chrome controls add their own interactive glass on top.
 ///
 /// Keeping every `#available(macOS 26, *)` check in this one file means the views (`HeaderView`,
 /// `SettingsScreen`, `DashboardView`) stay free of inline availability branches.
