@@ -18,7 +18,7 @@ This Swift edition replaces the original Tauri app. Both editions stay in the sa
 
 ### Guardrails (do not break)
 - Version lanes: Swift owns `0.7.x` and up; Tauri stays on `0.6.x`. Never use a `0.6.x` number here.
-- Keep every Swift release marked as a GitHub pre-release until the owner explicitly approves the public flip. For now cut only `-beta.N` tags (Early Access) - `release.yml` marks those pre-release automatically. A plain stable Swift tag becomes GitHub "Latest". See the release-swift skill.
+- Keep every Swift release marked as a GitHub pre-release until the owner explicitly approves the public flip. For now cut only `-beta.N` tags (Early Access) - `release.yml` marks those pre-release automatically. A plain stable Swift tag becomes GitHub "Latest"; when doing that public flip, carry forward the final Tauri `latest.json` so older Tauri installs can still update to `v0.6.28`. See the release-swift skill.
 - Never leave a release in Draft, and never ship blank notes: the release-swift skill generates the changelog and verifies the published release after every cut.
 - The Tauri edition is frozen and stays in the repo forever. Do not cut another Tauri release unless there is an emergency.
 

@@ -100,7 +100,15 @@ fi
 
 1. Confirm the final Tauri goodbye release `v0.6.28` already shipped and points users to the Swift download.
 2. `git tag -a v0.7.0 -m "v0.7.0" && git push origin v0.7.0` - `release.yml` marks a plain tag non-prerelease, so it becomes GitHub "Latest".
-3. Attach its notes (step 6) and update openusage.ai + README to point at the Swift app.
+3. Attach its notes (step 6).
+4. Carry forward the final Tauri updater manifest onto the stable Swift GitHub Release. Older Tauri builds still fetch `releases/latest/download/latest.json`; once the Swift release becomes GitHub "Latest", this extra asset keeps those installs able to update to the `v0.6.28` migration-banner build:
+   ```sh
+   tmpdir="$(mktemp -d)"
+   gh release download v0.6.28 --pattern latest.json --dir "$tmpdir"
+   gh release upload v0.7.0 "$tmpdir/latest.json" --clobber
+   ```
+5. Verify the stable Swift release has its DMG, release notes, appcast entry, and the carried-forward `latest.json` asset.
+6. Update openusage.ai + README to point at the Swift app.
 
 ## Changelog template
 
