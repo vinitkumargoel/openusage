@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.7.0-beta.14
+
+### New Features
+- feat(popover): opaque body + content-aware Liquid Glass footer/header ([#724](https://github.com/robinebers/openusage/pull/724)) by @robinebers
+
+### Bug Fixes
+- fix(build): stamp linked SDK 26 so AppKit renders modern Liquid Glass controls ([#725](https://github.com/robinebers/openusage/pull/725)) by @robinebers
+- Fix Cursor credits and extra usage balances ([#723](https://github.com/robinebers/openusage/pull/723)) by @robinebers
+
+---
+
+### Changelog
+**Full Changelog**: [v0.7.0-beta.13...v0.7.0-beta.14](https://github.com/robinebers/openusage/compare/v0.7.0-beta.13...v0.7.0-beta.14)
+
+- [f72e514](https://github.com/robinebers/openusage/commit/f72e514235375859f0f6f96052d48f2289c19e99) fix(build): stamp linked SDK 26 so AppKit renders modern Liquid Glass controls (#725) by @robinebers
+- [3760233](https://github.com/robinebers/openusage/commit/376023305f7ee76a8ba8fb3dcc8e6f929bd740a8) feat(popover): opaque body + content-aware Liquid Glass footer/header (#724) by @robinebers
+- [f8e7ff7](https://github.com/robinebers/openusage/commit/f8e7ff779d2e288ac0454915b2c3473f969a7cb7) Fix Cursor credits and extra usage balances (#723) by @robinebers
+
 ## v0.7.0-beta.13
 
 > Heads up: while OpenUsage is in Early Access, updating to a new beta resets all settings — layout, pins, preferences, and the menu-bar shortcut — back to defaults. Betas ship no settings migrations, so each one starts from a clean slate.
