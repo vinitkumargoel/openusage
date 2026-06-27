@@ -101,6 +101,10 @@ struct WidgetGroupedListView: View {
     private enum DashboardMetricCardRow: Identifiable {
         case metric(ResolvedRow)
         case divider
+        /// #596: the provider's quick-link buttons (Status / Console / Dashboard ...), pinned at the
+        /// bottom of the collapsible expanded section. They collapse with the caret — part of the
+        /// expander, not always-visible chrome.
+        case links([ProviderLink])
 
         var id: String {
             switch self {
@@ -108,6 +112,8 @@ struct WidgetGroupedListView: View {
                 "metric:\(row.descriptor.id)"
             case .divider:
                 "expanded-divider"
+            case .links:
+                "provider-links"
             }
         }
     }
@@ -127,7 +133,8 @@ struct WidgetGroupedListView: View {
             alwaysRows: alwaysRows,
             expandedRows: expandedRows,
             hasExpandedMetrics: group.hasExpandedMetrics,
-            isExpanded: isExpanded
+            isExpanded: isExpanded,
+            links: group.provider.visibleLinks
         )
         // Same card builder the lifted preview uses, so the floating chip can't drift from the live card.
         return DashboardMetricCard {
@@ -139,6 +146,8 @@ struct WidgetGroupedListView: View {
                 case .metric(let entry):
                     row(entry.descriptor, data: entry.data, in: providerID,
                         condensedTop: condensedIDs.contains(entry.descriptor.id))
+                case .links(let links):
+                    ProviderLinksView(links: links)
                 case .divider:
                     expandToggle(providerID: providerID, isExpanded: isExpanded)
                 }
@@ -157,11 +166,19 @@ struct WidgetGroupedListView: View {
         alwaysRows: [ResolvedRow],
         expandedRows: [ResolvedRow],
         hasExpandedMetrics: Bool,
-        isExpanded: Bool
+        isExpanded: Bool,
+        links: [ProviderLink]
     ) -> [DashboardMetricCardRow] {
-        alwaysRows.map(DashboardMetricCardRow.metric)
-            + (hasExpandedMetrics ? [.divider] : [])
-            + (isExpanded ? expandedRows.map(DashboardMetricCardRow.metric) : [])
+        // #596: provider quick-link buttons live INSIDE the collapsible expanded section, pinned at its
+        // bottom, so collapsing the caret hides them along with the expanded metrics — they're part of
+        // the expander, not always-visible chrome. The caret shows for any provider with expanded
+        // content (metrics OR links), so a links-only provider still gets a caret to reveal its buttons.
+        let hasLinks = !links.isEmpty
+        let hasExpandedContent = hasExpandedMetrics || hasLinks
+        return alwaysRows.map(DashboardMetricCardRow.metric)
+            + (hasExpandedContent ? [.divider] : [])
+            + (isExpanded && !expandedRows.isEmpty ? expandedRows.map(DashboardMetricCardRow.metric) : [])
+            + (isExpanded && hasLinks ? [.links(links)] : [])
     }
 
     /// The centered caret at the bottom of a provider card that reveals or hides its "Shown on expand"
@@ -206,7 +223,8 @@ struct WidgetGroupedListView: View {
         return ids
     }
 
-    private func row(_ descriptor: WidgetDescriptor, data: WidgetData, in providerID: String, condensedTop: Bool) -> some View {
+    private func row(_ descriptor: WidgetDescriptor, data: WidgetData, in providerID: String,
+                     condensedTop: Bool) -> some View {
         let isActive = activeMetricID == descriptor.id
         return WidgetRowView(
             data: data,
@@ -295,7 +313,11 @@ struct WidgetGroupedListView: View {
             return []
         }
         let alwaysShown = group.alwaysShownWidgets.compactMap { layout.descriptor(for: $0)?.id }
-        guard group.hasExpandedMetrics, layout.isProviderExpanded(providerID) else { return alwaysShown }
+        // The caret is a drop target whenever the expanded section is open — including a links-only
+        // section (buttons but no expanded metrics), so a metric can be dragged past the caret to tuck
+        // it below the fold even when only buttons are showing there.
+        let hasExpandedContent = group.hasExpandedMetrics || !group.provider.visibleLinks.isEmpty
+        guard hasExpandedContent, layout.isProviderExpanded(providerID) else { return alwaysShown }
         let expanded = group.expandedWidgets.compactMap { layout.descriptor(for: $0)?.id }
         return alwaysShown + [expandedDividerID(for: providerID)] + expanded
     }
