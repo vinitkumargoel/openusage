@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.7.1-beta.2
+
+### New Features
+- Add OpenRouter usage provider ([#763](https://github.com/robinebers/openusage/pull/763)) by @robinebers
+- Quota pace alerts — 3 triggers, launch-prime, per-app stacking ([#786](https://github.com/robinebers/openusage/pull/786)) by @robinebers
+- Share Screenshot footer submenu + copied-to-clipboard pill ([#785](https://github.com/robinebers/openusage/pull/785)) by @robinebers
+
+### Bug Fixes
+- Refresh Codex OAuth token by JWT exp, not a hardcoded 8-day age ([#769](https://github.com/robinebers/openusage/pull/769)) by @robinebers
+
+### Chores
+- Drop parsing of retired Codex per-model and review rate limits by @robinebers
+- Restore README hero screenshot and trailing newline by @robinebers
+- Add Installation section with Homebrew cask and latest release DMG by @robinebers
+
+---
+
+### Changelog
+**Full Changelog**: [v0.7.1-beta.1...v0.7.1-beta.2](https://github.com/robinebers/openusage/compare/v0.7.1-beta.1...v0.7.1-beta.2)
+
+- [386fcfe](https://github.com/robinebers/openusage/commit/386fcfeb3186ec9f3fe3bd43a8c7d7a4db8efd21) chore(codex): drop parsing of retired per-model and review rate limits by @robinebers
+- [8360e93](https://github.com/robinebers/openusage/commit/8360e93717c3af04ff27cf49cd1d7274693dac4f) feat(openrouter): add OpenRouter usage provider (#763) by @robinebers
+- [1cf2eb4](https://github.com/robinebers/openusage/commit/1cf2eb4f418299707aac50b60df324c1556a2374) feat(notifications): quota pace alerts — 3 triggers, launch-prime, per-app stacking (#633) (#786) by @robinebers
+- [fd0890e](https://github.com/robinebers/openusage/commit/fd0890ef65536ffdd4875e7a75a1531850f70ba1) feat(share): Share Screenshot footer submenu + copied-to-clipboard pill (#785) by @robinebers
+- [b50efbb](https://github.com/robinebers/openusage/commit/b50efbb41f71520112be32f823c896de34813823) docs: restore README hero screenshot and trailing newline by @robinebers
+- [2eada69](https://github.com/robinebers/openusage/commit/2eada69bc904e9268264713bc87761afe94f8f7a) docs: add Installation section with Homebrew cask and latest release DMG by @robinebers
+- [42ce1e2](https://github.com/robinebers/openusage/commit/42ce1e2cde443d443dde59c9ccd941adf26af44b) fix(codex): refresh OAuth token by JWT exp, not a hardcoded 8-day age (#516) (#769) by @robinebers
+
 ## v0.7.1-beta.1
 
 ### New Features
