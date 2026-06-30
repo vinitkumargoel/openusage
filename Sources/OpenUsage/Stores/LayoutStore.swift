@@ -36,6 +36,10 @@ final class LayoutStore {
             // DashboardView reads these on its very next render to slide in from the screen being left.
             screenSlideFrom = oldValue
             screenSlideID += 1
+            // Leaving Customize drops the L2 detail selection so reopening Customize shows the list,
+            // never a stranded detail screen. The popover-closed reset sets `screen = .dashboard`, so
+            // this also covers close/reopen.
+            if screen != .customize { customizeProviderID = nil }
         }
     }
     /// Supports DashboardView's horizontal screen-switch slide: the screen being left, plus a counter
@@ -48,6 +52,12 @@ final class LayoutStore {
         get { screen == .customize }
         set { screen = newValue ? .customize : .dashboard }
     }
+    /// The provider whose Customize detail (L2) is showing. nil shows the provider list (L1); a set id
+    /// shows that provider's metric sections and API key. UI-only (not persisted): transient navigation
+    /// like `draggingID`, cleared when leaving Customize (see `screen`'s didSet) and on popover close
+    /// (DashboardView resets `screen` to `.dashboard`). Kept separate from `expandedProviderIDs` —
+    /// that's the dashboard caret, unrelated to this master/detail route.
+    var customizeProviderID: String?
     /// Placed widget being drag-reordered (transient). `PlacedWidget.id`, never persisted.
     var draggingID: UUID?
     /// Persisted provider display order (provider IDs). Drives both the dashboard groups and the
@@ -90,6 +100,17 @@ final class LayoutStore {
     /// copied twice in a row (the pill's text doesn't change, so without this it wouldn't re-animate).
     private(set) var shareConfirmationTrigger = 0
     private var shareConfirmationClearTask: Task<Void, Never>?
+
+    /// Transient in-Customize notice that drives the floating pill above the Customize content (e.g.
+    /// "Starred for menu bar", or the orange "Up to 2 stars per provider" denial). Set by
+    /// `presentCustomizationNotice`, cleared automatically after a couple of seconds. Never persisted;
+    /// cleared on popover close via `clearCustomizationNotice`.
+    private(set) var customizationNotice: String?
+    /// The notice's tone: `.positive` (green checkmark, success) or `.notice` (orange, the cap denial).
+    private(set) var customizationNoticeTone: CustomizationNoticeTone = .positive
+    /// Bumped on every present so the pill replays its pop-in even when the same notice repeats.
+    private(set) var customizationNoticeTrigger = 0
+    private var customizationNoticeClearTask: Task<Void, Never>?
 
     /// Bounded, app-wide undo stack for layout customization (remove/add a metric, reorder metrics or
     /// providers, pin/unpin, move across the expand caret). UI-only state (not persisted): undo is a
@@ -335,6 +356,43 @@ final class LayoutStore {
                 expandedMetrics: metrics.filter { expandedMetricIDs.contains($0.id) }
             )
         }
+    }
+
+    /// The L1 Customize list: every known provider in the user's saved order, regardless of enablement.
+    /// Disabled providers appear here (greyed in the UI) so the user can re-enable them or open their
+    /// detail — unlike `customizeGroups`, which filters them out for the dashboard and the old flat
+    /// Customize. Each row carries the enablement flag, the total metric count (the badge number), and
+    /// the pinned count.
+    var customizeProviderRows: [ProviderRow] {
+        orderedProviders().map { provider in
+            ProviderRow(
+                provider: provider,
+                isEnabled: isProviderEnabled(provider.id),
+                metricCount: metricCount(for: provider.id),
+                pinnedCount: pinnedCount(forProvider: provider.id)
+            )
+        }
+    }
+
+    /// Total metrics a provider supports — the L1 row's badge number. Registry descriptor count,
+    /// independent of how many the user has enabled.
+    func metricCount(for providerID: String) -> Int {
+        registry.descriptors(for: providerID).count
+    }
+
+    /// The L2 Customize detail for one provider: every metric it supports, split across the
+    /// "Always Visible" / "On Demand" divider, in its saved metric order. Available even when the
+    /// provider is disabled so L2 can render dimmed-but-editable. nil for an unknown provider or one
+    /// with no metrics — the per-provider slice of `customizeGroups` without the enablement guard.
+    func customizeDetail(for providerID: String) -> ProviderMetrics? {
+        guard let provider = registry.provider(id: providerID) else { return nil }
+        let metrics = orderedSupportedMetrics(for: providerID)
+        guard !metrics.isEmpty else { return nil }
+        return ProviderMetrics(
+            provider: provider,
+            alwaysShownMetrics: metrics.filter { !expandedMetricIDs.contains($0.id) },
+            expandedMetrics: metrics.filter { expandedMetricIDs.contains($0.id) }
+        )
     }
 
     /// A provider's supported metrics in custom order, independent of whether each metric is enabled.
@@ -708,7 +766,7 @@ final class LayoutStore {
         guard !canPin(descriptorID) else { return nil }
         if let providerID = registry.descriptor(id: descriptorID)?.providerID,
            pinnedCount(forProvider: providerID) >= Self.maxPinsPerProvider {
-            return "Up to \(Self.maxPinsPerProvider) pins per provider"
+            return "Up to \(Self.maxPinsPerProvider) stars per provider"
         }
         return nil
     }
@@ -748,6 +806,29 @@ final class LayoutStore {
         shareConfirmation = false
         shareConfirmationClearTask?.cancel()
         shareConfirmationClearTask = nil
+    }
+
+    /// Show a transient in-Customize pill (the floating confirmation above the Customize content).
+    /// `tone` picks the green success style or the orange denial style. Auto-clears after a couple of
+    /// seconds; also cleared on popover close via `clearCustomizationNotice`.
+    func presentCustomizationNotice(_ message: String, tone: CustomizationNoticeTone = .positive) {
+        customizationNotice = message
+        customizationNoticeTone = tone
+        customizationNoticeTrigger += 1
+        customizationNoticeClearTask?.cancel()
+        customizationNoticeClearTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2.5))
+            guard !Task.isCancelled else { return }
+            self?.customizationNotice = nil
+        }
+    }
+
+    /// Clear any showing Customize pill and cancel its auto-clear task. Called when the popover closes
+    /// so a pill mid-countdown can't reappear stale on the next open.
+    func clearCustomizationNotice() {
+        customizationNotice = nil
+        customizationNoticeClearTask?.cancel()
+        customizationNoticeClearTask = nil
     }
 
     /// Pin or unpin a metric for the menu bar. Pinning is a no-op when it would exceed a cap, so callers
@@ -1094,4 +1175,23 @@ struct ProviderMetrics: Identifiable {
     /// Every supported metric in custom order (always-shown first, then expanded).
     var metrics: [WidgetDescriptor] { alwaysShownMetrics + expandedMetrics }
     var hasExpandedMetrics: Bool { !expandedMetrics.isEmpty }
+}
+
+/// One row in the Customize provider list (L1): the provider plus the derived bits the row renders —
+/// whether it's enabled (the master toggle + Active/Inactive label), how many metrics it supports
+/// (the badge), and how many are pinned. Drives `CustomizeProviderListView`. Unlike `ProviderMetrics`,
+/// this includes disabled providers so they stay visible in the list.
+struct ProviderRow: Identifiable {
+    let provider: Provider
+    let isEnabled: Bool
+    let metricCount: Int
+    let pinnedCount: Int
+    var id: String { provider.id }
+}
+
+/// Tone for the transient in-Customize pill (`LayoutStore.customizationNotice`): green success or
+/// orange denial.
+enum CustomizationNoticeTone {
+    case positive
+    case notice
 }
