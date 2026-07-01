@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.7.1-beta.7
+
+### Bug Fixes
+- cursor: price Claude Sonnet 5 in spend imputation manifest ([#813](https://github.com/robinebers/openusage/pull/813)) by @robinebers
+- Dynamic widget height for single-provider users ([#810](https://github.com/robinebers/openusage/pull/810)) by @robinebers
+
+### Chores
+- notifications: debug-log each pace-notification decision ([#811](https://github.com/robinebers/openusage/pull/811)) by @robinebers
+
+---
+
+### Changelog
+**Full Changelog**: [v0.7.1-beta.6...v0.7.1-beta.7](https://github.com/robinebers/openusage/compare/v0.7.1-beta.6...v0.7.1-beta.7)
+
+- [e56c360](https://github.com/robinebers/openusage/commit/e56c360b230924658da36f8ac16fdce06add29ab) chore(notifications): debug-log each pace-notification decision (#811) by @robinebers
+- [f0aacfc](https://github.com/robinebers/openusage/commit/f0aacfca006ced72ef5ca086d27dbe5a75bea381) fix(cursor): price Claude Sonnet 5 in spend imputation manifest (#813) by @robinebers
+- [0ebd9e4](https://github.com/robinebers/openusage/commit/0ebd9e44a81d3063da583158fe31abf1cbb5b38a) fix: dynamic widget height for single-provider users (#800) (#810) by @robinebers
+
 ## v0.7.1-beta.6
 
 ### New Features
