@@ -47,6 +47,18 @@ final class CodexProvider: ProviderRuntime {
         ] + WidgetDescriptor.spendTiles(provider: provider)
     }
 
+    func hasLocalCredentials() async -> Bool {
+        // Same sources as `refresh()`: auth.json candidates first, keychain as the fallback. Only a
+        // usable access token counts (see `hasUsableAccessToken`) — an API-key-only auth.json can't
+        // serve the usage API, so seeding it on would just show an error row.
+        let (fileCandidates, _) = authStore.loadAuthCandidates()
+        if fileCandidates.contains(where: \.hasUsableAccessToken) {
+            return true
+        }
+        let keychain = await loadOffMainActor { [authStore] in authStore.loadKeychainAuth() }
+        return keychain?.hasUsableAccessToken == true
+    }
+
     func refresh() async -> ProviderSnapshot {
         let (fileCandidates, _) = authStore.loadAuthCandidates()
         var lastFallbackError: Error?

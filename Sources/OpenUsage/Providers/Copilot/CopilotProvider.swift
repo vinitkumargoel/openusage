@@ -35,6 +35,11 @@ final class CopilotProvider: ProviderRuntime {
         ]
     }
 
+    func hasLocalCredentials() async -> Bool {
+        // Same source as `refresh()`: editor config, gh config, or the gh keychain entry.
+        await loadOffMainActor { [authStore] in authStore.loadToken() } != nil
+    }
+
     func refresh() async -> ProviderSnapshot {
         let token = await loadOffMainActor { [authStore] in authStore.loadToken() }
         guard let token else {

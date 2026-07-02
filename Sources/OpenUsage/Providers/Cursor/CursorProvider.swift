@@ -55,6 +55,11 @@ final class CursorProvider: ProviderRuntime {
         return descriptors
     }
 
+    func hasLocalCredentials() async -> Bool {
+        // Same source as `refresh()`: any auth state (state DB or keychain) counts.
+        await loadOffMainActor { [authStore] in authStore.loadAuthState() } != nil
+    }
+
     func refresh() async -> ProviderSnapshot {
         guard let state = await loadOffMainActor({ [authStore] in authStore.loadAuthState() }) else {
             return ProviderSnapshot.error(provider: provider, error: CursorAuthError.notLoggedIn)

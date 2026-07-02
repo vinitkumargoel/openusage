@@ -39,6 +39,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // AppContainer stores), so migrated values are in place when the stores load and a genuine fresh
         // install still presents an empty domain — how the migrator tells a first launch from an upgrade.
         // Nothing is wiped now; settings carry across updates. See `SettingsMigrator`.
+        // The fresh-install answer is captured BEFORE migrating (the schema stamp makes the domain
+        // non-empty) and handed to `AppContainer`, whose `FirstRunSeeder` seeds a minimal provider set.
+        let isFreshInstall = SettingsMigrator.isFreshInstall()
         SettingsMigrator.migrate()
         // Let only the `SMAppService` login item drive startup: opt out of AppKit's reopen-on-login
         // so a reboot doesn't also restore us and race the login item in the first place. The guard
@@ -49,7 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // preferredColorScheme, so the override is applied at the AppKit level once at launch;
         // the Theme picker on the Settings screen re-applies it on change.
         AppearanceSetting.applyCurrent()
-        let container = AppContainer()
+        let container = AppContainer(isFreshInstall: isFreshInstall)
         self.container = container
         statusItemController = StatusItemController(container: container, updater: updater)
         // Starts background update checks (release build only; dormant under preview/`swift run`).

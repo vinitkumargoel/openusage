@@ -2,6 +2,12 @@
 
 The popover that opens from the menu bar icon. Providers are sections; each section shows the metrics you've enabled.
 
+## First launch
+
+A fresh install doesn't turn on every provider OpenUsage knows about. It starts with Claude, Codex, and Cursor, then quickly checks which AI tools are actually set up on your Mac (by looking for their local logins — nothing is sent anywhere) and switches to exactly that set. If nothing is found, the Claude/Codex/Cursor starter set stays. A one-time card at the top of the dashboard explains this and points to **Customize**, where you can turn any provider on or off; the card stays until you close it with its ✕ button.
+
+This only happens on a brand-new install. Updating the app never changes which providers you have on, and installs from before this behavior keep showing every provider (new providers still appear automatically for them) unless they turn some off.
+
 Each provider card leads with its **Always Visible** metrics. Any metrics you've moved below the **On Demand** line are tucked away behind the in-card caret — click it to reveal them below the caret, click again to collapse. Open cards stay open across popover closes and app restarts. A provider with nothing tucked away shows no caret.
 
 When you expand a card, the tucked-away metrics open below the caret as a single-column list, so each detail row keeps the full card width.
@@ -49,7 +55,7 @@ The bar pinned to the bottom of the popover. On the left: the app version, and a
 
 Open Customize from the footer's **Customize** button (or press **Return**). It's a two-level screen: a list of providers, then a provider's detail.
 
-The **provider list** shows every provider with a switch to turn it on or off, an Active/Inactive status, a count of its metrics, and a chevron into its detail. Turn a provider off and it stays in the list, greyed — its metrics hide from the dashboard and menu bar but keep their setup for when you turn it back on. Drag providers by their grip to reorder; tap a row to open its detail.
+The **provider list** shows every provider with a switch to turn it on or off, an Active/Inactive status, a count of its metrics, and a chevron into its detail. Turn a provider off and it stays in the list, greyed — its metrics hide from the dashboard and menu bar but keep their setup for when you turn it back on. Drag providers by their grip to reorder; tap a row to open its detail. On a fresh install only the providers detected on your Mac start on (see "First launch" above); this list is where you add the rest.
 
 A provider's **detail** has a header (the same on/off switch) and two metric sections: **Always Visible** (shown on the dashboard card) and **On Demand** (tucked behind the card's caret). Each metric row is a switch with its name beside it, a star to add it to the menu bar, and a drag grip. Drag a metric across the dashed divider between the sections to move it between Always Visible and On Demand, or drag it onto a row on the other side. You can star up to two metrics per provider for the menu bar. Providers that need an API key (OpenRouter today) show an **API Key** section here too — add, edit, or clear the key for just that provider.
 

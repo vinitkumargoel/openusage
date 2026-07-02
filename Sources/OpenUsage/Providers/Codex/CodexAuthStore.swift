@@ -34,6 +34,13 @@ struct CodexAuthState: Hashable, Sendable {
 
     var auth: CodexAuth
     var source: Source
+
+    /// Whether this candidate carries a non-empty OAuth access token — the same bar `refresh()`'s
+    /// probe requires before fetching usage (an API-key-only auth.json can't serve the usage API).
+    /// `hasLocalCredentials()`'s first-run detection checks this, so the two can never drift.
+    var hasUsableAccessToken: Bool {
+        auth.tokens?.accessToken?.isEmpty == false
+    }
 }
 
 enum CodexAuthError: Error, LocalizedError, Equatable {

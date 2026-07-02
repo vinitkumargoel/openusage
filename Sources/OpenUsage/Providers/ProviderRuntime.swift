@@ -23,6 +23,12 @@ protocol ProviderRuntime: AnyObject {
     var widgetDescriptors: [WidgetDescriptor] { get }
 
     func refresh() async -> ProviderSnapshot
+
+    /// Whether credentials for this provider already exist on this machine — a cheap, local-only probe
+    /// (files, keychain, SQLite; never the network). Used once, on a fresh install's first launch, by
+    /// `FirstRunSeeder` to enable exactly the providers the user actually has. Mirror the credential
+    /// sources `refresh()` reads, and run blocking loads via `loadOffMainActor`.
+    func hasLocalCredentials() async -> Bool
 }
 
 /// Run a blocking, `Sendable` credential load off the MainActor.

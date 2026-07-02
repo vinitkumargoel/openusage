@@ -16,6 +16,7 @@ import AppKit
 /// the window height in lockstep with the slide (one spring), and the scroll views only take over once
 /// content exceeds the screen-height cap.
 struct DashboardView: View {
+    @Environment(AppContainer.self) private var container
     @Environment(LayoutStore.self) private var layout
     @Environment(WidgetDataStore.self) private var dataStore
     @Environment(PopoverTransparencyStore.self) private var transparency
@@ -448,11 +449,22 @@ struct DashboardView: View {
     /// scroll position, so that modifier stays here on the scroll view.
     private var scrollingDashboard: some View {
         PopoverScrollView {
-            widgetContent
-                .padding(.horizontal, Self.outerPadding)
-                .padding(.top, density.contentTopPadding)
-                .padding(.bottom, Self.contentBottomGap)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: 0) {
+                // The one-time first-run hint sits above the provider sections (and above the
+                // empty-state line, which a fresh install can hit while nothing has data yet).
+                // It scrolls with the content — a grouped card, not chrome.
+                if container.onboarding.isCustomizeHintPending {
+                    CustomizeHintCard()
+                        .padding(.bottom, density.sectionSpacing)
+                        .transition(.scale(scale: 0.95).combined(with: .opacity))
+                }
+                widgetContent
+            }
+            .animation(Motion.spring, value: container.onboarding.isCustomizeHintPending)
+            .padding(.horizontal, Self.outerPadding)
+            .padding(.top, density.contentTopPadding)
+            .padding(.bottom, Self.contentBottomGap)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .scrollPosition($dashboardScrollPosition)
     }
