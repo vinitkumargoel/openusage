@@ -13,9 +13,10 @@ struct AntigravityModelConfig: Sendable, Equatable {
 /// Turns Antigravity's quota responses into the app's metric vocabulary.
 ///
 /// The authoritative source is the `RetrieveUserQuotaSummary` RPC (`parseQuotaSummary`): two pools
-/// (Gemini; Claude = every non-Gemini model incl. GPT-OSS), each with a rolling 5-hour and a weekly
-/// window — up to four meters. Builds without that RPC fall back to the legacy per-model endpoints,
-/// whose fine-grained models collapse into the two pool meters ("Gemini", "Claude"), each keeping the
+/// (Gemini, shown as "Session"/"Weekly"; Claude = every non-Gemini model incl. GPT-OSS), each with a
+/// rolling 5-hour and a weekly window — up to four meters. Builds without that RPC fall back to the
+/// legacy per-model endpoints, whose fine-grained models collapse into the two 5h pool meters
+/// ("Session", "Claude"), each keeping the
 /// worst (lowest) remaining fraction in its pool; the legacy data is 5h-only, so the weekly meters
 /// read "No data" there.
 enum AntigravityUsageMapper {
@@ -34,13 +35,13 @@ enum AntigravityUsageMapper {
     /// a future bucket (e.g. `gemini-image-5h`) must never silently join a pool, and pool identity is
     /// never inferred from `displayName`/`window`.
     static let summaryBuckets: [(bucketID: String, label: String, periodMs: Int)] = [
-        ("gemini-5h", AntigravityMetric.geminiLabel, MetricPeriod.sessionMs),
-        ("gemini-weekly", AntigravityMetric.geminiWeeklyLabel, MetricPeriod.weekMs),
+        ("gemini-5h", AntigravityMetric.sessionLabel, MetricPeriod.sessionMs),
+        ("gemini-weekly", AntigravityMetric.weeklyLabel, MetricPeriod.weekMs),
         ("3p-5h", AntigravityMetric.claudeLabel, MetricPeriod.sessionMs),
         ("3p-weekly", AntigravityMetric.claudeWeeklyLabel, MetricPeriod.weekMs)
     ]
 
-    /// `RetrieveUserQuotaSummary` → up to four pool meters, ordered Gemini, Gemini Weekly, Claude,
+    /// `RetrieveUserQuotaSummary` → up to four pool meters, ordered Session, Weekly, Claude,
     /// Claude Weekly. Accepts both the LS envelope (`{"response": {"groups": …}}`) and the bare remote
     /// payload (`{"groups": …}`).
     ///
@@ -150,7 +151,7 @@ enum AntigravityUsageMapper {
     // MARK: - Line building (legacy pooling)
 
     /// Collapse model configs into the two quota-pool meters, keeping the worst fraction per pool and
-    /// ordering Gemini → Claude. Blacklisted and empty-label models are dropped.
+    /// ordering the Gemini pool ("Session") before Claude. Blacklisted and empty-label models are dropped.
     static func buildLines(_ configs: [AntigravityModelConfig]) -> [MetricLine] {
         var pooled: [String: (fraction: Double, resetTime: Date?)] = [:]
         for config in configs {
@@ -199,14 +200,14 @@ enum AntigravityUsageMapper {
 
     static func poolLabel(_ normalizedLabel: String) -> String {
         // Pro and Flash draw from one shared pool since Antigravity's 2026-05-19 quota merge, so every
-        // Gemini model (Pro, Flash, Ultra, bare names) maps to the single "Gemini" meter; Claude,
+        // Gemini model (Pro, Flash, Ultra, bare names) maps to the single "Session" meter; Claude,
         // GPT-OSS, and any other non-Gemini model share the other pool.
-        normalizedLabel.lowercased().contains("gemini") ? AntigravityMetric.geminiLabel : AntigravityMetric.claudeLabel
+        normalizedLabel.lowercased().contains("gemini") ? AntigravityMetric.sessionLabel : AntigravityMetric.claudeLabel
     }
 
     static func sortKey(_ poolLabel: String) -> String {
-        // Gemini before Claude, matching the widget declaration order.
-        poolLabel.lowercased().contains("gemini") ? "0_\(poolLabel)" : "1_\(poolLabel)"
+        // The Gemini pool ("Session") before Claude, matching the widget declaration order.
+        poolLabel == AntigravityMetric.sessionLabel ? "0_\(poolLabel)" : "1_\(poolLabel)"
     }
 
     /// Normalize a raw plan/tier string to a short label. LS returns "Google AI Pro" (strip the prefix,

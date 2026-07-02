@@ -8,13 +8,13 @@ Antigravity has two shared quota pools, and each pool has two windows — a roll
 
 | Metric | Meaning |
 |---|---|
-| Gemini | The shared Gemini pool (Pro and Flash draw from the same quota), rolling 5-hour window |
-| Gemini Weekly | The same Gemini pool's weekly window |
+| Session | The shared Gemini pool (Pro and Flash draw from the same quota), rolling 5-hour window |
+| Weekly | The same Gemini pool's weekly window |
 | Claude | The shared non-Gemini pool (Claude, GPT-OSS, …), rolling 5-hour window |
 | Claude Weekly | The same non-Gemini pool's weekly window |
 | Plan | Your subscription tier, e.g. `Pro` or `Ultra` (optional widget) |
 
-Gemini Pro and Gemini Flash are one pool: using either model drains the same quota, so OpenUsage shows one Gemini meter per window instead of separate Pro and Flash meters. Every non-Gemini model shares the second pool, shown under the Claude name. Quotas are reported as a fraction (full = 0% used), so there are no token or dollar spend tiles.
+Gemini Pro and Gemini Flash are one pool: using either model drains the same quota, so OpenUsage shows one meter per window instead of separate Pro and Flash meters. That pair is named Session and Weekly to match the other providers' rows. Every non-Gemini model shares the second pool, shown under the Claude name (like Codex's Spark pair). Quotas are reported as a fraction (full = 0% used), so there are no token or dollar spend tiles.
 
 While a pool's rolling 5-hour window has no usage yet, that meter reads **Not started** on the trailing label instead of a reset countdown; hover explains that the session begins after your first message. The weekly meters always show a normal reset countdown.
 
@@ -32,7 +32,7 @@ If neither is available you'll see *Start Antigravity or run `agy` and try again
 - **"Start Antigravity or run `agy`…"** — sign in to the Antigravity app (or run `agy`) so a usable token exists, then refresh.
 - **The weekly meters show "No data"** — your Antigravity build doesn't expose the quota-summary endpoint yet (only newer builds do). The 5-hour meters still work from the older endpoints; updating Antigravity brings the weekly meters back.
 - **A meter shows "No data"** — that pool/window wasn't in the latest response (some tiers only report certain windows). The other meters still update.
-- **Gemini Pro and Flash look identical** — they are: both draw from the one shared Gemini pool, which is why there's a single Gemini meter now.
+- **Where did the Gemini Pro and Flash meters go?** — merged: both models draw from the one shared Gemini pool, which is now the single Session meter.
 - **Quotas look full after heavy use** — the 5-hour windows reset on a rolling basis and the weekly windows once a week; the reset time is shown on each meter.
 
 ## Under the hood

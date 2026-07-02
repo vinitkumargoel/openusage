@@ -45,7 +45,7 @@ final class AntigravityQuotaSummaryTests: XCTestCase {
         XCTAssertEqual(bare, wrapped)
 
         guard let lines = bare else { return XCTFail("full summary did not parse") }
-        XCTAssertEqual(lines.map(\.label), ["Gemini", "Gemini Weekly", "Claude", "Claude Weekly"])
+        XCTAssertEqual(lines.map(\.label), ["Session", "Weekly", "Claude", "Claude Weekly"])
         XCTAssertEqual(lines.map { used($0) }, [25, 10, 60, 0])
         XCTAssertEqual(resetsAt(lines[0]), OpenUsageISO8601.date(from: "2026-07-02T16:00:00Z"))
         XCTAssertEqual(resetsAt(lines[2]), OpenUsageISO8601.date(from: "2026-07-02T15:30:00Z"))
@@ -64,7 +64,7 @@ final class AntigravityQuotaSummaryTests: XCTestCase {
         ]}]}
         """
         let lines = AntigravityUsageMapper.parseQuotaSummary(Data(json.utf8))
-        XCTAssertEqual(lines?.map(\.label), ["Gemini Weekly"])
+        XCTAssertEqual(lines?.map(\.label), ["Weekly"])
         XCTAssertEqual(used(lines?.first), 50)
     }
 
@@ -79,7 +79,7 @@ final class AntigravityQuotaSummaryTests: XCTestCase {
         ]}]}
         """
         let lines = AntigravityUsageMapper.parseQuotaSummary(Data(json.utf8))
-        XCTAssertEqual(lines?.map(\.label), ["Gemini"])
+        XCTAssertEqual(lines?.map(\.label), ["Session"])
         XCTAssertEqual(used(lines?.first), 75)
     }
 
@@ -96,13 +96,13 @@ final class AntigravityQuotaSummaryTests: XCTestCase {
         // displayName — only the exact known bucketIds bind.
         let json = """
         {"groups":[{"buckets":[
-          {"bucketId":"gemini-image-5h","displayName":"Gemini","window":"5h","remainingFraction":0.1},
-          {"displayName":"Gemini","window":"5h","remainingFraction":0.2},
+          {"bucketId":"gemini-image-5h","displayName":"Session","window":"5h","remainingFraction":0.1},
+          {"displayName":"Session","window":"5h","remainingFraction":0.2},
           {"bucketId":"gemini-5h","remainingFraction":0.75}
         ]}]}
         """
         let lines = AntigravityUsageMapper.parseQuotaSummary(Data(json.utf8))
-        XCTAssertEqual(lines?.map(\.label), ["Gemini"])
+        XCTAssertEqual(lines?.map(\.label), ["Session"])
         XCTAssertEqual(used(lines?.first), 25)
     }
 
@@ -115,7 +115,7 @@ final class AntigravityQuotaSummaryTests: XCTestCase {
         ]}]}}
         """
         let weeklyLines = AntigravityUsageMapper.parseQuotaSummary(Data(weeklyOnly.utf8))
-        XCTAssertEqual(weeklyLines?.map(\.label), ["Gemini Weekly", "Claude Weekly"])
+        XCTAssertEqual(weeklyLines?.map(\.label), ["Weekly", "Claude Weekly"])
         XCTAssertEqual(weeklyLines?.compactMap { periodMs($0) }, [MetricPeriod.weekMs, MetricPeriod.weekMs])
 
         let sessionOnly = """
@@ -125,7 +125,7 @@ final class AntigravityQuotaSummaryTests: XCTestCase {
         ]}]}
         """
         let sessionLines = AntigravityUsageMapper.parseQuotaSummary(Data(sessionOnly.utf8))
-        XCTAssertEqual(sessionLines?.map(\.label), ["Gemini", "Claude"])
+        XCTAssertEqual(sessionLines?.map(\.label), ["Session", "Claude"])
         XCTAssertEqual(sessionLines?.compactMap { periodMs($0) }, [MetricPeriod.sessionMs, MetricPeriod.sessionMs])
     }
 
@@ -157,7 +157,7 @@ final class AntigravityQuotaSummaryTests: XCTestCase {
             AntigravityModelConfig(label: "Gemini 3 Pro", modelID: "a", remainingFraction: 1, resetTime: nil),
             AntigravityModelConfig(label: "Claude Opus", modelID: "b", remainingFraction: 1, resetTime: nil)
         ]).map(\.label))
-        XCTAssertEqual(legacyLabels, ["Gemini", "Claude"])
+        XCTAssertEqual(legacyLabels, ["Session", "Claude"])
         XCTAssertTrue(legacyLabels.isSubset(of: descriptorLabels))
     }
 
@@ -192,7 +192,7 @@ final class AntigravityQuotaSummaryTests: XCTestCase {
 
         let snapshot = await provider.refresh()
         XCTAssertEqual(snapshot.plan, "Pro")
-        XCTAssertEqual(snapshot.lines.map(\.label), ["Gemini", "Gemini Weekly", "Claude", "Claude Weekly"])
+        XCTAssertEqual(snapshot.lines.map(\.label), ["Session", "Weekly", "Claude", "Claude Weekly"])
         XCTAssertEqual(snapshot.lines.map { used($0) }, [25, 10, 60, 0])
         XCTAssertFalse(routing.requests.contains { $0.url.path.contains("fetchAvailableModels") },
                        "a parsed summary must not touch the legacy model endpoints")
@@ -255,7 +255,7 @@ final class AntigravityQuotaSummaryTests: XCTestCase {
 
         let snapshot = await provider.refresh()
         // Summary values win — not the single 1%-used line the legacy GetUserStatus configs would pool to.
-        XCTAssertEqual(snapshot.lines.map(\.label), ["Gemini", "Gemini Weekly", "Claude", "Claude Weekly"])
+        XCTAssertEqual(snapshot.lines.map(\.label), ["Session", "Weekly", "Claude", "Claude Weekly"])
         XCTAssertEqual(snapshot.lines.map { used($0) }, [25, 10, 60, 0])
         XCTAssertEqual(snapshot.plan, "Pro")
         XCTAssertFalse(routing.requests.contains { $0.url.path.hasSuffix("/GetCommandModelConfigs") })
@@ -304,7 +304,7 @@ final class AntigravityQuotaSummaryTests: XCTestCase {
         let provider = makeLSProvider(routing: routing)
 
         let snapshot = await provider.refresh()
-        XCTAssertEqual(snapshot.lines.map(\.label), ["Gemini", "Claude"])
+        XCTAssertEqual(snapshot.lines.map(\.label), ["Session", "Claude"])
         XCTAssertEqual(snapshot.lines.map { used($0) }, [50, 20])
         XCTAssertEqual(snapshot.plan, "Pro")
     }

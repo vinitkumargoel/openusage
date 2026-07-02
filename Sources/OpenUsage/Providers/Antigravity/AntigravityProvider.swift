@@ -35,8 +35,8 @@ final class AntigravityProvider: ProviderRuntime {
 
     var widgetDescriptors: [WidgetDescriptor] {
         [
-            .percent(id: AntigravityMetric.geminiID, provider: provider, title: AntigravityMetric.geminiLabel),
-            .percent(id: AntigravityMetric.geminiWeeklyID, provider: provider, title: AntigravityMetric.geminiWeeklyLabel),
+            .percent(id: AntigravityMetric.geminiID, provider: provider, title: AntigravityMetric.sessionLabel),
+            .percent(id: AntigravityMetric.geminiWeeklyID, provider: provider, title: AntigravityMetric.weeklyLabel),
             .percent(id: AntigravityMetric.claudeID, provider: provider, title: AntigravityMetric.claudeLabel),
             .percent(id: AntigravityMetric.claudeWeeklyID, provider: provider, title: AntigravityMetric.claudeWeeklyLabel)
         ]
