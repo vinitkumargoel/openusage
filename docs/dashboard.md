@@ -29,8 +29,8 @@ Rows with a reset date tick every 30 seconds, so countdowns and pace stay live b
 
 ## Right-click menus
 
-Every row: **Hide · Star for menu bar / Unstar · Refresh \<provider\> · Customize…**
-Provider headers: **Hide \<provider\> · Refresh \<provider\> · Customize…** (Hide turns the whole provider off; turn it back on in Customize.) plus **Share Screenshot** (see below).
+Every row: **Hide · Star for menu bar / Unstar · Refresh \<provider\> · Customize…** (Customize opens straight to that provider's metrics.)
+Provider headers: **Hide \<provider\> · Refresh \<provider\> · Customize…** (Hide turns the whole provider off; turn it back on in Customize. Customize opens straight to that provider's metrics.) plus **Share Screenshot** (see below).
 
 ## Share
 
