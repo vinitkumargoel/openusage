@@ -38,6 +38,11 @@ final class ZAIProvider: ProviderRuntime {
         ]
     }
 
+    func hasLocalCredentials() async -> Bool {
+        // Same source as `refresh()`: a stored or environment-exported API key.
+        await loadOffMainActor { [authStore] in authStore.loadAPIKey() } != nil
+    }
+
     func refresh() async -> ProviderSnapshot {
         guard let auth = await loadOffMainActor({ [authStore] in authStore.loadAPIKey() }) else {
             return ProviderSnapshot.error(provider: provider, error: ZAIAuthError.missingKey)

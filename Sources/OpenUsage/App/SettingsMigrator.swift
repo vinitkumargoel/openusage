@@ -102,7 +102,14 @@ enum SettingsMigrator {
     /// defaults, so an empty domain means fresh; existing keys with no schema version mean a legacy
     /// install to migrate forward. An empty `domainName` (unbundled `swift run`) has no domain to
     /// inspect — treat it as fresh, since there is nothing to migrate.
-    private static func isFreshInstall(defaults: UserDefaults, domainName: String) -> Bool {
+    ///
+    /// Internal (not just the migrator's own check) because `AppDelegate` reads it BEFORE calling
+    /// `migrate()` — stamping the schema version makes the domain non-empty, so the answer must be
+    /// captured first. `FirstRunSeeder` keys off it to seed a fresh install's enabled providers.
+    static func isFreshInstall(
+        defaults: UserDefaults = .standard,
+        domainName: String = Bundle.main.bundleIdentifier ?? ""
+    ) -> Bool {
         guard !domainName.isEmpty else { return true }
         return (defaults.persistentDomain(forName: domainName) ?? [:]).isEmpty
     }

@@ -37,6 +37,13 @@ struct ClaudeCredentialState: Hashable, Sendable {
     var fullData: ClaudeCredentialsFile?
     var inferenceOnly: Bool
 
+    /// Whether this candidate carries a non-blank access token — the single definition of "usable"
+    /// shared by `refresh()`'s candidate filter and `hasLocalCredentials()`'s first-run detection, so
+    /// the two can never drift.
+    var hasUsableAccessToken: Bool {
+        oauth.accessToken?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    }
+
     /// A token-free, log-safe one-line descriptor for diagnosing auth failures from a default-level
     /// (info) log: the source kind plus booleans for whether this candidate carries a refresh token and
     /// whether its access token is already expired (`expiresAt`, epoch ms, vs `now`). NEVER includes any

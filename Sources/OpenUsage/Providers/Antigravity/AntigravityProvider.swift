@@ -42,6 +42,15 @@ final class AntigravityProvider: ProviderRuntime {
         ]
     }
 
+    func hasLocalCredentials() async -> Bool {
+        // The keychain token (or our refreshed-token cache) is the works-with-the-app-closed source
+        // `refresh()` falls back to; a logged-in Antigravity install has it even when no language
+        // server is running, so process discovery isn't needed here.
+        await loadOffMainActor { [authStore] in
+            authStore.loadKeychainToken() != nil || authStore.loadCachedToken() != nil
+        }
+    }
+
     func refresh() async -> ProviderSnapshot {
         do {
             let result = try await probe()

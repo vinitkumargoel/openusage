@@ -253,6 +253,13 @@ final class FakeHTTPClient: HTTPClient, @unchecked Sendable {
     }
 }
 
+/// Test-target-only default so test doubles don't each need a stub. The app target has no such
+/// default on purpose: a real provider must decide its own credential probe (see `FirstRunSeeder`).
+extension ProviderRuntime {
+    func hasLocalCredentials() async -> Bool { false }
+}
+
+
 @MainActor
 final class TestProviderRuntime: ProviderRuntime {
     let provider: Provider

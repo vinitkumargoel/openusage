@@ -62,3 +62,5 @@ See [Logging](logging.md) for the full behavior: subsystem tags, the file size c
 The app version shows in the popover footer.
 
 Your settings carry across updates — layout, stars, preferences, and the menu-bar shortcut all stay put. When an update changes how a setting is stored, the app upgrades it in place on launch, stepping through any in-between versions if you skipped a few. Nothing is reset. (Earlier betas wiped all settings on every update; that no longer happens.)
+
+Which providers you have on also carries across updates. Only a brand-new install picks its starting set by detecting the AI tools on your Mac (see [Dashboard § First launch](dashboard.md#first-launch)); an update never changes your provider choices.

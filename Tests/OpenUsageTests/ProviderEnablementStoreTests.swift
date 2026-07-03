@@ -78,6 +78,76 @@ final class ProviderEnablementStoreTests: XCTestCase {
         XCTAssertEqual(enabledIDs, ["codex"])
     }
 
+    // MARK: - Enabled-list mode (fresh installs)
+
+    func testSeedingSwitchesToEnabledListMode() {
+        let defaults = makeDefaults("seed")
+        let store = ProviderEnablementStore(defaults: defaults)
+
+        store.seedEnabledProviders(["claude", "codex"])
+
+        XCTAssertTrue(store.isEnabled("claude"))
+        XCTAssertTrue(store.isEnabled("codex"))
+        XCTAssertFalse(store.isEnabled("grok"))
+        // The key property of enabled-list mode: a provider shipped later defaults to OFF.
+        XCTAssertFalse(store.isEnabled("a-provider-that-ships-next-year"))
+
+        let reloaded = ProviderEnablementStore(defaults: defaults)
+        XCTAssertEqual(reloaded.enabledIDs, ["claude", "codex"])
+        XCTAssertTrue(reloaded.isEnabled("claude"))
+        XCTAssertFalse(reloaded.isEnabled("grok"))
+    }
+
+    func testTogglesPersistInEnabledListMode() {
+        let defaults = makeDefaults("enabled-toggles")
+        let store = ProviderEnablementStore(defaults: defaults)
+        store.seedEnabledProviders(["claude"])
+
+        store.setEnabled(true, for: "grok")
+        store.setEnabled(false, for: "claude")
+
+        let reloaded = ProviderEnablementStore(defaults: defaults)
+        XCTAssertEqual(reloaded.enabledIDs, ["grok"])
+        XCTAssertTrue(reloaded.isEnabled("grok"))
+        XCTAssertFalse(reloaded.isEnabled("claude"))
+    }
+
+    func testReseedFiresOnProviderEnabledForNewlyOnOnly() {
+        let store = ProviderEnablementStore(defaults: makeDefaults("reseed-enable"))
+        store.seedEnabledProviders(["claude", "codex"])
+        var enabledIDs: [String] = []
+        store.onProviderEnabled = { enabledIDs.append($0) }
+
+        // The detection pass replacing the fallback: codex stays on (no callback), grok turns on.
+        store.seedEnabledProviders(["codex", "grok"])
+
+        XCTAssertEqual(enabledIDs, ["grok"])
+    }
+
+    func testNoOpReseedDoesNotNotify() {
+        let store = ProviderEnablementStore(defaults: makeDefaults("reseed-noop"))
+        store.seedEnabledProviders(["claude"])
+        let notPosted = XCTNSNotificationExpectation(name: ProviderEnablementStore.didChangeNotification)
+        notPosted.isInverted = true
+
+        store.seedEnabledProviders(["claude"])
+
+        wait(for: [notPosted], timeout: 0.2)
+    }
+
+    func testLegacyModeIgnoresEnabledListUntilSeeded() {
+        // An existing install (disabled-list mode) must keep its semantics: absent enabled key means
+        // everything is on except the explicitly disabled IDs.
+        let defaults = makeDefaults("legacy-untouched")
+        defaults.set(["devin"], forKey: "openusage.disabledProviders.v1")
+        let store = ProviderEnablementStore(defaults: defaults)
+
+        XCTAssertNil(store.enabledIDs)
+        XCTAssertFalse(store.isEnabled("devin"))
+        XCTAssertTrue(store.isEnabled("claude"))
+        XCTAssertTrue(store.isEnabled("a-provider-that-ships-next-year"))
+    }
+
     private func makeDefaults(_ name: String) -> UserDefaults {
         let suiteName = "OpenUsageTests.Enablement.\(name).\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

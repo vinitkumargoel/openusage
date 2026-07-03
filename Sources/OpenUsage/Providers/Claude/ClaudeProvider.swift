@@ -52,10 +52,15 @@ final class ClaudeProvider: ProviderRuntime {
         ] + WidgetDescriptor.spendTiles(provider: provider)
     }
 
+    func hasLocalCredentials() async -> Bool {
+        // Same sources and same usability filter as `refresh()` (see `hasUsableAccessToken`).
+        await loadOffMainActor { [authStore] in authStore.loadCredentialCandidates() }
+            .contains(where: \.hasUsableAccessToken)
+    }
+
     func refresh() async -> ProviderSnapshot {
         let storedCandidates = await loadOffMainActor { [authStore] in authStore.loadCredentialCandidates() }
-        let candidates = storedCandidates
-            .filter { $0.oauth.accessToken?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false }
+        let candidates = storedCandidates.filter(\.hasUsableAccessToken)
         guard !candidates.isEmpty else {
             // No CLI credentials anywhere. A login done only in the Claude desktop app is stored in an
             // Electron-encrypted blob OpenUsage can't read, so a bare "Not logged in" reads as wrong to

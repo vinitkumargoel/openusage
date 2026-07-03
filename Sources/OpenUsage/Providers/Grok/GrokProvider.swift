@@ -40,6 +40,13 @@ final class GrokProvider: ProviderRuntime {
         ] + WidgetDescriptor.spendTiles(provider: provider)
     }
 
+    func hasLocalCredentials() async -> Bool {
+        // Same source as `refresh()`: ~/.grok/auth.json with at least one keyed entry.
+        await loadOffMainActor { [authStore] in
+            ((try? authStore.loadAuthCandidates()) ?? []).isEmpty == false
+        }
+    }
+
     func refresh() async -> ProviderSnapshot {
         do {
             return try await loadAndProbe()

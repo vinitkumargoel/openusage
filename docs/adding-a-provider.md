@@ -15,6 +15,11 @@ A provider is a small Swift module under `Sources/OpenUsage/Providers/<Name>/` t
 OpenUsage never asks the user to paste a token — if the provider's own CLI or app has already logged in,
 OpenUsage reads those existing credentials.
 
+Besides `refresh()`, every provider implements `hasLocalCredentials()` — a cheap, local-only check
+(files, keychain; never the network) for whether those credentials exist at all. A fresh install probes
+it once to turn on exactly the providers the user actually has (see `FirstRunSeeder`). Mirror the same
+credential sources `refresh()` reads, and run blocking loads via `loadOffMainActor`.
+
 ## The metric contract
 
 `refresh()` returns a `ProviderSnapshot` whose `lines` are `MetricLine` values. Pick the case by the shape
@@ -45,8 +50,11 @@ factory only when there is no typed error, and never return stale or empty data 
 1. **Check first.** Look at open issues and `docs/providers/` to see if the provider is already requested
    or in progress.
 2. **Create the module.** Add `Sources/OpenUsage/Providers/<Name>/` with the auth store, usage client, and
-   mapper, conforming to `ProviderRuntime`. Reuse the shared helpers in `Support/` (`ProviderParse` for
-   JSON/number/percent parsing, `OpenUsageISO8601` for timestamps) instead of copying them.
+   mapper, conforming to `ProviderRuntime` — both `refresh()` and `hasLocalCredentials()` (the compiler
+   enforces the latter; there is no default). Implement `hasLocalCredentials()` as a null-check on the
+   same auth-store load `refresh()` starts with — don't write a second credential-reading path. Reuse the
+   shared helpers in `Support/` (`ProviderParse` for JSON/number/percent parsing, `OpenUsageISO8601` for
+   timestamps) instead of copying them.
 3. **Declare its widgets.** Expose the provider's metrics as `WidgetDescriptor`s using the factories in
    `WidgetDescriptor+Factories.swift` (`percent`, `boundedDollars`, `spend`, `tokenSpend`, `combined`, `values`, `badge`, and so on).
 4. **Register it.** Add the provider to the list in `AppContainer`.

@@ -33,6 +33,12 @@ final class DevinProvider: ProviderRuntime {
         ]
     }
 
+    func hasLocalCredentials() async -> Bool {
+        // Same sources as `refresh()`: the credentials file, then the Devin app's stored auth.
+        if authStore.loadCredentialsFile() != nil { return true }
+        return await loadOffMainActor { [authStore] in authStore.loadAppAuth() } != nil
+    }
+
     func refresh() async -> ProviderSnapshot {
         var sawAPIKey = false
         var sawAuthFailure = false
