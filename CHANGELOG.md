@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.7.3-beta.2
+
+### New Features
+- feat(providers): credential-detect providers added by updates; unify installs on enabled-list mode ([#838](https://github.com/robinebers/openusage/pull/838)) by @robinebers
+- feat(copilot): show org-level AI credit usage for org-managed Business/Enterprise seats ([#843](https://github.com/robinebers/openusage/pull/843)) by @robinebers
+- feat(updates): in-popover update banner + Sparkle 2.9.4 focus fix ([#842](https://github.com/robinebers/openusage/pull/842)) by @robinebers
+- feat(ui): replace footer split button with a single Options menu ([#841](https://github.com/robinebers/openusage/pull/841)) by @robinebers
+
+### Bug Fixes
+- fix(copilot): keep probing other orgs when one org's billing has an outage ([#843](https://github.com/robinebers/openusage/pull/843)) by @robinebers
+- fix(notifications): open popover when a pace alert is tapped ([#840](https://github.com/robinebers/openusage/pull/840)) by @robinebers
+
+### Refactor
+- refactor(copilot): default both org billing metrics below the expand caret ([#843](https://github.com/robinebers/openusage/pull/843)) by @robinebers
+
+---
+
+### Changelog
+**Full Changelog**: [v0.7.3-beta.1...v0.7.3-beta.2](https://github.com/robinebers/openusage/compare/v0.7.3-beta.1...v0.7.3-beta.2)
+
+- [b15a47e](https://github.com/robinebers/openusage/commit/b15a47ed6df02a5ce6eb0672ed5ffc5aac65e702) fix(copilot): keep probing other orgs when one org's billing has an outage by @robinebers
+- [1171895](https://github.com/robinebers/openusage/commit/1171895a30ea2a5764ad6a9c65dbd8cd305b17b2) refactor(copilot): default both org billing metrics below the expand caret by @robinebers
+- [8b567ae](https://github.com/robinebers/openusage/commit/8b567aeeb8f53d094dba8af79711e3eaff7679dc) feat(copilot): show org-level AI credit usage for org-managed Business/Enterprise seats by @robinebers
+- [7cf5645](https://github.com/robinebers/openusage/commit/7cf564507738c4e4af06d6243e11a5c733dffc0c) feat(updates): in-popover update banner + Sparkle 2.9.4 focus fix by @robinebers
+- [db821dd](https://github.com/robinebers/openusage/commit/db821dd2191e94a9a9443adf8af5bc41b21d0948) feat(ui): replace footer split button with a single Options menu by @robinebers
+- [224c987](https://github.com/robinebers/openusage/commit/224c987c442a3d87ff14b4366835f7c683727dd4) Open the popover when a pace notification is tapped. by @robinebers
+- [1b077d1](https://github.com/robinebers/openusage/commit/1b077d18b30f2cbbda2787735bb23020218e891e) feat(providers): credential-detect providers added by updates; unify installs on enabled-list mode by @robinebers
+
 ## v0.7.3-beta.1
 
 ### New Features
