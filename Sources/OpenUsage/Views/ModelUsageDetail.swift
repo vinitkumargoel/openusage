@@ -16,19 +16,15 @@ struct ModelUsageDetail: View {
     private static let width: CGFloat = 280
 
     var body: some View {
+        let percents = Self.wholePercents(breakdown.models.map(share(for:)))
         VStack(alignment: .leading, spacing: 8) {
             header
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(breakdown.models.indices, id: \.self) { index in
-                    modelRow(breakdown.models[index])
+                    modelRow(breakdown.models[index], percent: percents[index])
                 }
             }
-            Text(breakdown.sourceNote)
-                .font(.system(size: 10))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity)
+            PopoverSourceNote(text: breakdown.sourceNote)
         }
         .padding(14)
         .frame(width: Self.width)
@@ -51,7 +47,7 @@ struct ModelUsageDetail: View {
     /// Two text lines and the bar: model name / cost on top, share percent / tokens beneath. The name
     /// only competes with the short cost figure, so it almost never truncates; the percent line answers
     /// what the bar can't say precisely.
-    private func modelRow(_ model: ModelUsageEntry) -> some View {
+    private func modelRow(_ model: ModelUsageEntry, percent: Int) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(model.model)
@@ -71,7 +67,7 @@ struct ModelUsageDetail: View {
             .font(.system(size: density.supportingPointSize))
 
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text("\(Int((share(for: model) * 100).rounded()))%")
+                Text("\(percent)%")
                     .monospacedDigit()
                 Spacer(minLength: 8)
                 Text(MetricFormatter.string(
@@ -116,6 +112,29 @@ struct ModelUsageDetail: View {
         let tokenTotal = breakdown.models.reduce(0) { $0 + $1.totalTokens }
         guard tokenTotal > 0 else { return 0 }
         return min(max(Double(model.totalTokens) / Double(tokenTotal), 0), 1)
+    }
+
+    /// Integer percentages that always total exactly 100 (largest-remainder rounding): rounding each
+    /// share independently can print a column that sums to 99 or 101, so every share is floored and
+    /// the leftover points go to the rows with the biggest fractional remainders. All-zero shares
+    /// (an empty period) stay all zero.
+    static func wholePercents(_ shares: [Double]) -> [Int] {
+        guard shares.contains(where: { $0 > 0 }) else { return shares.map { _ in 0 } }
+        let raw = shares.map { $0 * 100 }
+        var percents = raw.map { Int($0.rounded(.down)) }
+        var leftover = 100 - percents.reduce(0, +)
+        guard leftover > 0 else { return percents }
+        let byRemainder = raw.indices.sorted {
+            let lhs = raw[$0] - raw[$0].rounded(.down)
+            let rhs = raw[$1] - raw[$1].rounded(.down)
+            if lhs != rhs { return lhs > rhs }
+            return $0 < $1
+        }
+        for index in byRemainder where leftover > 0 {
+            percents[index] += 1
+            leftover -= 1
+        }
+        return percents
     }
 }
 

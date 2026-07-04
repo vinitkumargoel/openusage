@@ -22,12 +22,7 @@ struct UsageTrendDetail: View {
             chart
             axis
             if let note, !note.isEmpty {
-                Text(note)
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity)
+                PopoverSourceNote(text: note)
             }
         }
         .padding(12)
