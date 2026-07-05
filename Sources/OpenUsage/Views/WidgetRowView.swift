@@ -259,18 +259,6 @@ struct WidgetRowView: View {
     /// and an optional secondary line ("on-device estimate") beneath it.
     private var unboundedRow: some View {
         unboundedRowContent
-            .contentShape(Rectangle())
-            .onContinuousHover { phase in
-                guard data.hasModelBreakdown else {
-                    modelHover.dismiss()
-                    return
-                }
-                if case .active = phase {
-                    modelHover.inlineHover(true)
-                } else {
-                    modelHover.inlineHover(false)
-                }
-            }
             .onChange(of: data.modelBreakdown) { _, _ in modelHover.dismiss() }
             .onDisappear { modelHover.dismiss() }
     }
@@ -307,9 +295,22 @@ struct WidgetRowView: View {
                 }
             }
             .multilineTextAlignment(.trailing)
-            // Anchored to the value column (not the whole row) so the arrow centers on the figure it
-            // explains — the same anchoring the trend popover gets from the sparkline strip. The hover
-            // trigger stays row-wide (see `unboundedRow`); only the anchor is narrowed.
+            // Both the hover trigger and the popover anchor live on the value column, not the whole
+            // row: hovering the label (or empty gap) shouldn't reveal the breakdown — only the figure
+            // it explains should — and the arrow then centers on that figure, matching the trend
+            // popover's anchoring off the sparkline strip.
+            .contentShape(Rectangle())
+            .onContinuousHover { phase in
+                guard data.hasModelBreakdown else {
+                    modelHover.dismiss()
+                    return
+                }
+                if case .active = phase {
+                    modelHover.inlineHover(true)
+                } else {
+                    modelHover.inlineHover(false)
+                }
+            }
             .popover(
                 isPresented: Binding(
                     get: { data.hasModelBreakdown && modelHover.isPresented },
