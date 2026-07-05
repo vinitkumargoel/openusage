@@ -1,5 +1,35 @@
 # Changelog
 
+## v0.7.3-beta.6
+
+### New Features
+- Per-model spend breakdown when hovering the Today / Yesterday / Last 30 Days rows ([#850](https://github.com/robinebers/openusage/pull/850)) by @robinebers
+- Reset All re-detects installed tools ([#853](https://github.com/robinebers/openusage/pull/853)) by @robinebers
+- Codex status dot for reset-credit expiry ([#854](https://github.com/robinebers/openusage/pull/854)) by @robinebers
+
+### Bug Fixes
+- Exclude unpriceable usage from every displayed spend total ([#853](https://github.com/robinebers/openusage/pull/853)) by @robinebers
+- Model breakdown opens only from the value column; breakdown percentages always sum to 100 ([#850](https://github.com/robinebers/openusage/pull/850)) by @robinebers
+
+### Chores
+- Trigger Pages deploy from Release and pricing-supplement workflow completion by @robinebers
+
+---
+
+### Changelog
+**Full Changelog**: [v0.7.3-beta.5...v0.7.3-beta.6](https://github.com/robinebers/openusage/compare/v0.7.3-beta.5...v0.7.3-beta.6)
+
+- [88aa423](https://github.com/robinebers/openusage/commit/88aa423995b98f701ca294abda89eb91729106f9) feat(codex): status dot for reset-credit expiry by @robinebers
+- [d3459af](https://github.com/robinebers/openusage/commit/d3459af2c1316e779de5815f7db26395ab3d4786) fix(spend): exclude unpriceable usage from every displayed total by @robinebers
+- [45b05c6](https://github.com/robinebers/openusage/commit/45b05c69ce2a31b6d8747b385ec9355ab17bbc3e) feat(customize): Reset All re-runs installed-tool detection by @robinebers
+- [9bbe86f](https://github.com/robinebers/openusage/commit/9bbe86fbfc37c195fa1e049bfc4c5bf6c6b2b5b4) fix(dashboard): trigger the model breakdown only on the value column by @robinebers
+- [1917874](https://github.com/robinebers/openusage/commit/191787453f507fb6170f94ba3cdaca1e6fa3c03a) docs: research notes behind the model breakdown hover design by @robinebers
+- [f5f57ae](https://github.com/robinebers/openusage/commit/f5f57ae07085f80482f1f6ff0093ba4e3fc5c566) style(dashboard): one source-note string per provider across both popovers by @robinebers
+- [0d03230](https://github.com/robinebers/openusage/commit/0d03230e3d5d9214e0a84addd15804a21f013565) fix(dashboard): breakdown percentages always total 100; share the popover footer by @robinebers
+- [5ea4ba4](https://github.com/robinebers/openusage/commit/5ea4ba4f059d30b50ce31852339e6d1e55cdb08c) style(dashboard): center the source-note footer in the breakdown and trend popovers by @robinebers
+- [c11f0d5](https://github.com/robinebers/openusage/commit/c11f0d578103b560dfbb8c6baf7ccc71fc43fba4) feat(dashboard): per-model spend breakdown on spend-row hover by @robinebers
+- [4566101](https://github.com/robinebers/openusage/commit/4566101ba130f1fbf30f8b43126f87daa56412f7) ci: trigger Pages deploy from Release/pricing-supplement completion by @robinebers
+
 ## v0.7.3-beta.5
 
 ### New Features
