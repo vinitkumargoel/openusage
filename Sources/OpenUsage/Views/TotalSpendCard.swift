@@ -93,7 +93,9 @@ struct TotalSpendCard: View {
             ShareFeedbackIcon(copied: shareCopied)
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(.secondary)
-                .frame(width: 16, height: 16)
+                // Same height as the provider headers' trailing mark, so the header row measures the
+                // same and the arrow centers vertically exactly like the provider icons do.
+                .frame(width: 16, height: density.headerIconSize)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
