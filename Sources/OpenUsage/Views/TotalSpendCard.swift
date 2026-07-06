@@ -60,13 +60,21 @@ struct TotalSpendCard: View {
             Image(systemName: "info.circle")
                 .imageScale(.small)
                 .foregroundStyle(.secondary)
-                .hoverTooltip("Only includes Claude, Codex, Cursor and Grok.")
+                .hoverTooltip(infoTooltip)
             Spacer(minLength: 8)
             shareButton
         }
         .padding(.leading, 4)
         .padding(.trailing, 4)
         .padding(.vertical, 2)
+    }
+
+    /// Names the providers actually feeding the ring — the enabled spend-capable set — instead of a
+    /// hardcoded list, so disabling a provider (or a new spend provider shipping) can't make the
+    /// tooltip lie about what the total reflects.
+    private var infoTooltip: String {
+        let names = providers.map(\.displayName)
+        return "Only includes \(names.formatted(.list(type: .and)))."
     }
 
     private var shareButton: some View {
