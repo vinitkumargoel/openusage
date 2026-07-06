@@ -43,6 +43,20 @@ private extension EnvironmentValues {
     }
 }
 
+/// Turns every `hoverTooltip` in the subtree into a no-op. Share-card exports set this: `ImageRenderer`
+/// can't draw AppKit-backed views, so the tooltip's invisible `NSViewRepresentable` anchor would
+/// rasterize as the yellow "unsupported platform view" placeholder over the exported card.
+private struct TooltipsDisabledKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var hoverTooltipsDisabled: Bool {
+        get { self[TooltipsDisabledKey.self] }
+        set { self[TooltipsDisabledKey.self] = newValue }
+    }
+}
+
 /// Weak handle to the hovered target's backing `NSView`. The presenter resolves it to a screen rect
 /// lazily at show time (no continuous geometry publishing, and still correct if the popover moved).
 @MainActor
@@ -80,6 +94,7 @@ private struct TooltipAnchorView: NSViewRepresentable {
 private struct HoverTooltipModifier: ViewModifier {
     let text: String?
     @Environment(\.tooltipDepth) private var depth
+    @Environment(\.hoverTooltipsDisabled) private var disabled
     /// Stable per-target identity, so the presenter can track which targets are currently hovered and
     /// drop this one on exit.
     @State private var id = UUID()
@@ -95,7 +110,18 @@ private struct HoverTooltipModifier: ViewModifier {
         return text
     }
 
+    @ViewBuilder
     func body(content: Content) -> some View {
+        if disabled {
+            // Off-screen renders (share cards): no anchor view, no hover tracking — an AppKit-backed
+            // anchor would rasterize as a placeholder artifact in the exported PNG.
+            content
+        } else {
+            decorated(content)
+        }
+    }
+
+    private func decorated(_ content: Content) -> some View {
         content
             // Descendants nest one level deeper, so a child target outranks this one when a hover sits
             // inside both.

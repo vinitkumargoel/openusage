@@ -23,6 +23,9 @@ struct TotalSpendShareCardView: View {
         .frame(width: ShareCardView.width, alignment: .topLeading)
         .background(Theme.traySurface)
         .environment(\.colorScheme, appearance)
+        // ImageRenderer can't draw the tooltips' AppKit anchor views — without this, each anchor
+        // rasterizes as a yellow placeholder box over the card (e.g. on the ring's center total).
+        .environment(\.hoverTooltipsDisabled, true)
     }
 
     private var headerRow: some View {
