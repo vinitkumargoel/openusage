@@ -138,6 +138,7 @@ final class ClaudeProvider: ProviderRuntime {
 
         // Local spend tiles, scanned natively from Claude Code's session logs and priced through the
         // shared pricing store. `scan` runs on the scanner actor, off the main actor.
+        var spendActivity: SpendActivity?
         if let scan = await logUsageScanner.scan(now: now(), pricing: pricing()) {
             SpendTileMapper.appendTokenUsage(
                 scan.series, to: &mapped.lines, now: now(),
@@ -149,10 +150,11 @@ final class ClaudeProvider: ProviderRuntime {
                 scan.series, to: &mapped.lines, now: now(),
                 note: "From your Claude usage history (estimated)"
             )
+            spendActivity = scan.activity
         }
 
         MetricLine.appendNoDataIfNeeded(&mapped.lines)
-        return ProviderSnapshot.make(provider: provider, plan: mapped.plan, lines: mapped.lines, refreshedAt: now(), warning: warning)
+        return ProviderSnapshot.make(provider: provider, plan: mapped.plan, lines: mapped.lines, refreshedAt: now(), warning: warning, spendActivity: spendActivity)
     }
 
     private func fetchLiveUsage(state: inout ClaudeCredentialState) async throws -> ClaudeMappedUsage {
