@@ -493,6 +493,16 @@ struct DashboardView: View {
                 .padding(.vertical, 24)
                 .padding(.horizontal, 16)
         } else {
+            // The cross-provider Total Spend ring tops the provider sections, but only when it has a
+            // real aggregate to show (two or more providers with spend for some period) — with a single
+            // spend-tracking provider it would just repeat that provider's own rows.
+            if TotalSpendAggregator.hasCrossProviderSpend(
+                providers: layout.displayGroups.map(\.provider),
+                snapshots: dataStore.snapshots
+            ) {
+                TotalSpendCard()
+                    .padding(.bottom, density.sectionSpacing)
+            }
             WidgetGroupedListView(
                 reorderSpaceName: Self.reorderSpace,
                 reorderLift: $reorderLift
