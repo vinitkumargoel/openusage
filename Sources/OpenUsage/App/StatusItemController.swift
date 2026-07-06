@@ -47,7 +47,7 @@ final class StatusItemController: NSObject {
 
     /// One width across both densities (matches `DashboardView.popoverWidth`). The panel is a single
     /// column of metrics, so width is fixed; only height is user-resizable.
-    private static let panelWidth: CGFloat = 320
+    private static let panelWidth: CGFloat = 400
     /// Gap between the menu bar and the panel's top edge.
     private static let topGap: CGFloat = 4
     /// Corner radius of the panel surface; tuned to read like a system menu-bar popover.

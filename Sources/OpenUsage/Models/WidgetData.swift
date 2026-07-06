@@ -83,6 +83,13 @@ struct WidgetData: Hashable {
 
     var isBounded: Bool { limit != nil }
 
+    /// Provider id parsed off the widget id (`"codex.session"` → `"codex"`); nil for rows with no
+    /// backing widget id (gallery samples, legacy rows). Used to look up the provider's brand color
+    /// for the meter fill, mirroring the original OpenUsage per-provider bar tint.
+    var providerID: String? {
+        widgetID.flatMap { $0.split(separator: ".").first.map(String.init) }
+    }
+
     var hasModelBreakdown: Bool {
         hasData && isUsagePeriod && !(modelBreakdown?.models.isEmpty ?? true)
     }

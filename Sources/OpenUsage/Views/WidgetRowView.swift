@@ -203,6 +203,18 @@ struct WidgetRowView: View {
         severity.map(Theme.meterFill) ?? AnyShapeStyle(Color.secondary)
     }
 
+    /// Meter fill color. The original OpenUsage tinted each provider's bar with its brand hue
+    /// (Claude terracotta, Codex green, …) rather than the pace verdict; we reuse the single brand
+    /// map (`TotalSpendPalette`), keyed by the provider id parsed off the widget id. Falls back to
+    /// the pace-severity color when the row has no provider id (samples, legacy rows) or no data —
+    /// the pace tick and the flame warning still carry the run-out signal the brand bar drops.
+    private func brandFill(_ state: WidgetData.MeterState) -> AnyShapeStyle {
+        guard state.severity != nil, let id = data.providerID else {
+            return severityColor(state.severity)
+        }
+        return AnyShapeStyle(TotalSpendPalette.color(for: id))
+    }
+
     /// Primary line under the bar: value+mode word on the left ("50% left"), reset/limit context on
     /// the right. The headline is the Used/Left toggle (click to flip the global meter style, with
     /// the opposite reading in its tooltip) — the exact counterpart of the reset label's toggle.
@@ -400,7 +412,7 @@ struct WidgetRowView: View {
                 // on glass and adapts to Increase Contrast / Reduce Transparency.
                 Capsule().fill(.quaternary)
                 Capsule()
-                    .fill(partyMode ? PartyMode.meterFill : severityColor(state.severity))
+                    .fill(partyMode ? PartyMode.meterFill : brandFill(state))
                     .frame(width: fillWidth(track: proxy.size.width))
             }
             .overlay(alignment: .leading) {

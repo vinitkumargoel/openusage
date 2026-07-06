@@ -49,9 +49,9 @@ enum DensitySetting: String, Hashable, Sendable, CaseIterable {
     /// Vertical padding on a bounded (meter) row: 20pt bar-to-bar in Default, 10pt in Compact.
     var barRowPadding: CGFloat { self == .compact ? 5 : 10 }
 
-    /// Capsule meter height — a thin hairline like Claude Code's usage bars (a 10pt bar read as a
-    /// chunky slab next to them). Default's bar is one step taller to match its airier rhythm.
-    var meterHeight: CGFloat { self == .compact ? 4 : 5 }
+    /// Capsule meter height — a rounded pill matching the original OpenUsage progress bar (its
+    /// `h-3` = 12pt track). Compact steps it down to keep the denser rhythm.
+    var meterHeight: CGFloat { self == .compact ? 8 : 12 }
 
     /// Usage Trend sparkline height. Steps down in Compact so the chart row tightens with the rest of
     /// the card instead of standing taller than its neighbors.
