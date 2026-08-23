@@ -6,7 +6,6 @@ import type { DisplayPluginState } from "@/hooks/app/use-app-plugin-views"
 import type { SettingsPluginState } from "@/hooks/app/use-settings-plugin-list"
 import { useAppVersion } from "@/hooks/app/use-app-version"
 import { usePanel } from "@/hooks/app/use-panel"
-import { useAppUpdate } from "@/hooks/use-app-update"
 import { useAppUiStore } from "@/stores/app-ui-store"
 
 const ARROW_OVERHEAD_PX = 37
@@ -64,7 +63,6 @@ export function AppShell({
   })
 
   const appVersion = useAppVersion()
-  const { updateStatus, triggerInstall, checkForUpdates } = useAppUpdate()
 
   return (
     <div
@@ -103,9 +101,6 @@ export function AppShell({
             <PanelFooter
               version={appVersion}
               autoUpdateNextAt={autoUpdateNextAt}
-              updateStatus={updateStatus}
-              onUpdateInstall={triggerInstall}
-              onUpdateCheck={checkForUpdates}
               onRefreshAll={onRefreshAll}
               showAbout={showAbout}
               onShowAbout={() => setShowAbout(true)}

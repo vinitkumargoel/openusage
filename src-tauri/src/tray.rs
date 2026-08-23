@@ -1,7 +1,7 @@
 use tauri::image::Image;
-use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
+use tauri::menu::{CheckMenuItem, ContextMenu, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::path::BaseDirectory;
-use tauri::tray::{MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_nspanel::ManagerExt;
 use tauri_plugin_store::StoreExt;
@@ -136,73 +136,99 @@ pub fn create(app_handle: &AppHandle) -> tauri::Result<()> {
         ],
     )?;
 
+    // The menu is deliberately NOT attached with `.menu(&menu)`.
+    //
+    // Doing so calls NSStatusItem::setMenu, which makes macOS open the menu
+    // itself on mouse-down -- before tray-icon's overlay view can intercept
+    // the click. On macOS 26+ that overlay no longer wins the race, so
+    // `show_menu_on_left_click(false)` is ignored: left-click opened the menu
+    // and no TrayIconEvent was ever emitted. Instead we keep the menu
+    // detached and pop it up ourselves on right-click, below.
+    app_handle.on_menu_event(move |app_handle, event| {
+        log::debug!("tray menu: {}", event.id.as_ref());
+        match event.id.as_ref() {
+            "show_stats" => {
+                show_panel(app_handle);
+                let _ = app_handle.emit("tray:navigate", "home");
+            }
+            "go_to_settings" => {
+                show_panel(app_handle);
+                let _ = app_handle.emit("tray:navigate", "settings");
+            }
+            "about" => {
+                show_panel(app_handle);
+                let _ = app_handle.emit("tray:show-about", ());
+            }
+            "quit" => {
+                log::info!("quit requested via tray");
+                app_handle.exit(0);
+            }
+            "log_error" | "log_warn" | "log_info" | "log_debug" | "log_trace" => {
+                let selected_level = match event.id.as_ref() {
+                    "log_error" => log::LevelFilter::Error,
+                    "log_warn" => log::LevelFilter::Warn,
+                    "log_info" => log::LevelFilter::Info,
+                    "log_debug" => log::LevelFilter::Debug,
+                    "log_trace" => log::LevelFilter::Trace,
+                    _ => unreachable!(),
+                };
+                set_stored_log_level(app_handle, selected_level);
+                // Update all checkmarks - only the selected level should be checked
+                for (item, level) in &log_items {
+                    let _ = item.set_checked(*level == selected_level);
+                }
+            }
+            _ => {}
+        }
+    });
+
     TrayIconBuilder::with_id("tray")
         .icon(icon)
         .icon_as_template(true)
         .tooltip("OpenUsage")
-        .menu(&menu)
-        .show_menu_on_left_click(false)
-        .on_menu_event(move |app_handle, event| {
-            log::debug!("tray menu: {}", event.id.as_ref());
-            match event.id.as_ref() {
-                "show_stats" => {
-                    show_panel(app_handle);
-                    let _ = app_handle.emit("tray:navigate", "home");
-                }
-                "go_to_settings" => {
-                    show_panel(app_handle);
-                    let _ = app_handle.emit("tray:navigate", "settings");
-                }
-                "about" => {
-                    show_panel(app_handle);
-                    let _ = app_handle.emit("tray:show-about", ());
-                }
-                "quit" => {
-                    log::info!("quit requested via tray");
-                    app_handle.exit(0);
-                }
-                "log_error" | "log_warn" | "log_info" | "log_debug" | "log_trace" => {
-                    let selected_level = match event.id.as_ref() {
-                        "log_error" => log::LevelFilter::Error,
-                        "log_warn" => log::LevelFilter::Warn,
-                        "log_info" => log::LevelFilter::Info,
-                        "log_debug" => log::LevelFilter::Debug,
-                        "log_trace" => log::LevelFilter::Trace,
-                        _ => unreachable!(),
-                    };
-                    set_stored_log_level(app_handle, selected_level);
-                    // Update all checkmarks - only the selected level should be checked
-                    for (item, level) in &log_items {
-                        let _ = item.set_checked(*level == selected_level);
-                    }
-                }
-                _ => {}
-            }
-        })
-        .on_tray_icon_event(|tray, event| {
+        .on_tray_icon_event(move |tray, event| {
             let app_handle = tray.app_handle();
 
-            if let TrayIconEvent::Click {
-                button_state, rect, ..
+            let TrayIconEvent::Click {
+                button,
+                button_state,
+                rect,
+                ..
             } = event
-            {
-                if button_state == MouseButtonState::Up {
-                    let Some(panel) = get_or_init_panel!(app_handle) else {
-                        return;
-                    };
+            else {
+                return;
+            };
 
-                    if panel.is_visible() {
-                        log::debug!("tray click: hiding panel");
-                        panel.hide();
-                        return;
-                    }
-                    log::debug!("tray click: showing panel");
-
-                    // macOS quirk: must show window before positioning to another monitor
-                    panel.show_and_make_key();
-                    position_panel_at_tray_icon(app_handle, rect.position, rect.size);
-                }
+            if button_state != MouseButtonState::Up {
+                return;
             }
+
+            if button == MouseButton::Right {
+                log::debug!("tray click: opening menu");
+                let Some(window) = app_handle.get_webview_window("main") else {
+                    log::warn!("tray menu: main window not found");
+                    return;
+                };
+                if let Err(error) = menu.popup(window.as_ref().window()) {
+                    log::error!("failed to open tray menu: {}", error);
+                }
+                return;
+            }
+
+            let Some(panel) = get_or_init_panel!(app_handle) else {
+                return;
+            };
+
+            if panel.is_visible() {
+                log::debug!("tray click: hiding panel");
+                panel.hide();
+                return;
+            }
+            log::debug!("tray click: showing panel");
+
+            // macOS quirk: must show window before positioning to another monitor
+            panel.show_and_make_key();
+            position_panel_at_tray_icon(app_handle, rect.position, rect.size);
         })
         .build(app_handle)?;
 

@@ -4,11 +4,18 @@ See your usage at a glance from your menu bar. No digging through dashboards.
 
 ![OpenUsage Screenshot](screenshot.png)
 
-## Download
+## About this build
 
-[**Download the latest release**](https://github.com/robinebers/openusage/releases/latest) (macOS, Apple Silicon & Intel)
+This is a personal fork, built from source and installed by hand.
 
-The app auto-updates. Install once and you're set.
+It has no telemetry and no auto-updater — it never contacts anything except the
+providers you enable. To pick up changes, rebuild it:
+
+```sh
+bun install
+bun run build:release
+cp -R src-tauri/target/release/bundle/macos/OpenUsage.app /Applications/
+```
 
 ## What It Does
 
