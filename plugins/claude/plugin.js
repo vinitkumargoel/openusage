@@ -798,6 +798,43 @@
         }))
       }
 
+      // Anthropic moved the per-model weekly windows out of the top-level
+      // `seven_day_<model>` keys (which now come back null) and into a `limits`
+      // array. Each `weekly_scoped` entry names its own model, e.g. "Fable".
+      if (Array.isArray(data.limits)) {
+        for (let i = 0; i < data.limits.length; i++) {
+          const entry = data.limits[i]
+          if (!entry || entry.kind !== "weekly_scoped") continue
+          if (typeof entry.percent !== "number" || !Number.isFinite(entry.percent)) continue
+
+          const model = entry.scope && entry.scope.model
+          const label = model && typeof model.display_name === "string" ? model.display_name.trim() : ""
+          if (!label) continue
+
+          let alreadyShown = false
+          for (let j = 0; j < lines.length; j++) {
+            if (lines[j].label === label) {
+              alreadyShown = true
+              break
+            }
+          }
+          if (alreadyShown) continue
+
+          const scopedOpts = {
+            label: label,
+            used: entry.percent,
+            limit: 100,
+            format: { kind: "percent" },
+            periodDurationMs: 7 * 24 * 60 * 60 * 1000 // 7 days
+          }
+          if (entry.resets_at) {
+            scopedOpts.resetsAt = ctx.util.toIso(entry.resets_at)
+          }
+          lines.push(ctx.line.progress(scopedOpts))
+          ctx.host.log.info("scoped weekly limit: " + label)
+        }
+      }
+
       if (data.extra_usage && data.extra_usage.is_enabled) {
         const used = data.extra_usage.used_credits
         const limit = data.extra_usage.monthly_limit

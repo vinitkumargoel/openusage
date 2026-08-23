@@ -636,6 +636,99 @@ describe("claude plugin", () => {
     expect(result.lines.find((l) => l.label === "Claude Design")).toBeUndefined()
   })
 
+  it("renders a scoped weekly limit from the limits array", async () => {
+    const ctx = makeCtx()
+    ctx.host.fs.readText = () =>
+      JSON.stringify({ claudeAiOauth: { accessToken: "token", subscriptionType: "max" } })
+    ctx.host.fs.exists = () => true
+    ctx.host.http.request.mockReturnValue({
+      status: 200,
+      bodyText: JSON.stringify({
+        limits: [
+          {
+            kind: "weekly_scoped",
+            percent: 42,
+            resets_at: "2099-01-01 00:00:00 UTC",
+            scope: { model: { display_name: "Fable" } },
+          },
+        ],
+      }),
+    })
+    const plugin = await loadPlugin()
+    const result = plugin.probe(ctx)
+    const line = result.lines.find((l) => l.label === "Fable")
+    expect(line).toBeTruthy()
+    expect(line.used).toBe(42)
+    expect(line.limit).toBe(100)
+    expect(line.format).toEqual({ kind: "percent" })
+    expect(line.resetsAt).toBe("2099-01-01T00:00:00.000Z")
+    expect(line.periodDurationMs).toBe(7 * 24 * 60 * 60 * 1000)
+  })
+
+  it("renders every scoped weekly limit, not just a known model", async () => {
+    const ctx = makeCtx()
+    ctx.host.fs.readText = () =>
+      JSON.stringify({ claudeAiOauth: { accessToken: "token", subscriptionType: "max" } })
+    ctx.host.fs.exists = () => true
+    ctx.host.http.request.mockReturnValue({
+      status: 200,
+      bodyText: JSON.stringify({
+        limits: [
+          { kind: "weekly_scoped", percent: 10, scope: { model: { display_name: "Fable" } } },
+          { kind: "weekly_scoped", percent: 20, scope: { model: { display_name: "Opus" } } },
+        ],
+      }),
+    })
+    const plugin = await loadPlugin()
+    const result = plugin.probe(ctx)
+    expect(result.lines.find((l) => l.label === "Fable").used).toBe(10)
+    expect(result.lines.find((l) => l.label === "Opus").used).toBe(20)
+  })
+
+  it("skips scoped limits that are malformed or duplicate an existing line", async () => {
+    const ctx = makeCtx()
+    ctx.host.fs.readText = () =>
+      JSON.stringify({ claudeAiOauth: { accessToken: "token", subscriptionType: "max" } })
+    ctx.host.fs.exists = () => true
+    ctx.host.http.request.mockReturnValue({
+      status: 200,
+      bodyText: JSON.stringify({
+        seven_day_sonnet: { utilization: 3, resets_at: "2099-01-01T00:00:00.000Z" },
+        limits: [
+          { kind: "monthly_scoped", percent: 5, scope: { model: { display_name: "Ignored" } } },
+          { kind: "weekly_scoped", percent: "50", scope: { model: { display_name: "NonNumeric" } } },
+          { kind: "weekly_scoped", percent: 60 },
+          { kind: "weekly_scoped", percent: 70, scope: { model: { display_name: "  " } } },
+          { kind: "weekly_scoped", percent: 99, scope: { model: { display_name: "Sonnet" } } },
+        ],
+      }),
+    })
+    const plugin = await loadPlugin()
+    const result = plugin.probe(ctx)
+    expect(result.lines.find((l) => l.label === "Ignored")).toBeUndefined()
+    expect(result.lines.find((l) => l.label === "NonNumeric")).toBeUndefined()
+    // The existing Sonnet line wins; the scoped duplicate is not appended.
+    expect(result.lines.filter((l) => l.label === "Sonnet").length).toBe(1)
+    expect(result.lines.find((l) => l.label === "Sonnet").used).toBe(3)
+  })
+
+  it("ignores a limits value that is not an array", async () => {
+    const ctx = makeCtx()
+    ctx.host.fs.readText = () =>
+      JSON.stringify({ claudeAiOauth: { accessToken: "token", subscriptionType: "max" } })
+    ctx.host.fs.exists = () => true
+    ctx.host.http.request.mockReturnValue({
+      status: 200,
+      bodyText: JSON.stringify({
+        five_hour: { utilization: 1, resets_at: "2099-01-01T00:00:00.000Z" },
+        limits: { kind: "weekly_scoped" },
+      }),
+    })
+    const plugin = await loadPlugin()
+    const result = plugin.probe(ctx)
+    expect(result.lines.find((l) => l.label === "Session")).toBeTruthy()
+  })
+
   it("omits extra usage line when used credits are zero and no limit exists", async () => {
     const ctx = makeCtx()
     ctx.host.fs.readText = () =>

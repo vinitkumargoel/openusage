@@ -6,6 +6,7 @@
   const REFRESH_URL = "https://auth.openai.com/oauth/token"
   const USAGE_URL = "https://chatgpt.com/backend-api/wham/usage"
   const REFRESH_AGE_MS = 8 * 24 * 60 * 60 * 1000
+  const ACCESS_TOKEN_REFRESH_WINDOW_MS = 5 * 60 * 1000
   const ERR_NOT_LOGGED_IN = "Not logged in. Run `codex` to authenticate."
   const ERR_SESSION_EXPIRED = "Session expired. Run `codex` to log in again."
   const ERR_TOKEN_CONFLICT = "Token conflict. Run `codex` to log in again."
@@ -93,6 +94,10 @@
     return false
   }
 
+  function hasAccessTokenAuth(auth) {
+    return !!(auth && auth.tokens && auth.tokens.access_token)
+  }
+
   function isAuthFallbackError(e) {
     if (typeof e !== "string") return false
     return (
@@ -172,11 +177,61 @@
     return { candidates, missingPaths }
   }
 
+  // The access token carries its own expiry, so trust that first and only fall back to the
+  // last_refresh stamp when the token can't be decoded. Refreshing on the stamp alone renewed
+  // a still-valid token on every probe, and OpenAI treats a re-used refresh token as theft:
+  // it revokes the session, logging the codex CLI out too.
   function needsRefresh(ctx, auth, nowMs) {
-    if (!auth.last_refresh) return true
+    const accessToken = auth.tokens && auth.tokens.access_token
+    if (accessToken && ctx.jwt && typeof ctx.jwt.decodePayload === "function") {
+      const payload = ctx.jwt.decodePayload(accessToken)
+      const expiresAtSeconds = payload && payload.exp
+      if (typeof expiresAtSeconds === "number" && Number.isFinite(expiresAtSeconds)) {
+        const expiresAtMs = expiresAtSeconds * 1000
+        return expiresAtMs <= nowMs + ACCESS_TOKEN_REFRESH_WINDOW_MS
+      }
+    }
+
+    if (!auth.last_refresh) return false
     const lastMs = ctx.util.parseDateMs(auth.last_refresh)
-    if (lastMs === null) return true
+    if (lastMs === null) return false
     return nowMs - lastMs > REFRESH_AGE_MS
+  }
+
+  // Re-read the credentials before refreshing: the codex CLI may have refreshed in the
+  // background, in which case our in-memory refresh token is already spent. Returns "changed"
+  // when disk has newer credentials, "error" when they belong to a different account.
+  function reloadAuthState(ctx, authState) {
+    let reloaded = null
+    if (authState.source === "file" && authState.authPath) {
+      try {
+        const auth = tryParseAuthJson(ctx, ctx.host.fs.readText(authState.authPath))
+        if (hasTokenLikeAuth(auth)) {
+          reloaded = { auth, authPath: authState.authPath, source: "file" }
+        }
+      } catch (e) {
+        ctx.host.log.warn("auth reload failed for file " + authState.authPath + ": " + String(e))
+      }
+    } else if (authState.source === "keychain") {
+      reloaded = loadAuthFromKeychain(ctx)
+    }
+
+    if (!reloaded) return { status: "unchanged", authState }
+    if (!hasAccessTokenAuth(reloaded.auth)) {
+      return { status: "error", error: ERR_TOKEN_CONFLICT }
+    }
+
+    const expectedAccountId = authState.auth.tokens && authState.auth.tokens.account_id
+    const reloadedAccountId = reloaded.auth.tokens && reloaded.auth.tokens.account_id
+    if (expectedAccountId && reloadedAccountId !== expectedAccountId) {
+      return { status: "error", error: ERR_TOKEN_CONFLICT }
+    }
+
+    if (JSON.stringify(reloaded.auth) !== JSON.stringify(authState.auth)) {
+      ctx.host.log.info("auth changed during guarded reload, using updated credentials")
+      return { status: "changed", authState: reloaded }
+    }
+    return { status: "unchanged", authState }
   }
 
   function refreshToken(ctx, authState) {
@@ -445,26 +500,44 @@
     }))
   }
 
-  function probeWithAuthState(ctx, authState) {
-    const auth = authState.auth
+  function probeWithAuthState(ctx, initialAuthState) {
+    let authState = initialAuthState
+    let auth = authState.auth
 
     if (auth.tokens && auth.tokens.access_token) {
       const nowMs = Date.now()
       let accessToken = auth.tokens.access_token
-      const accountId = auth.tokens.account_id
+      let accountId = auth.tokens.account_id
+      let proactiveRefreshAuthError = null
 
       if (needsRefresh(ctx, auth, nowMs)) {
-        ctx.host.log.info("token needs refresh (age > " + (REFRESH_AGE_MS / 1000 / 60 / 60 / 24) + " days)")
-        const refreshed = refreshToken(ctx, authState)
+        ctx.host.log.info("token needs refresh")
+        const reload = reloadAuthState(ctx, authState)
+        if (reload.status === "error") throw reload.error
+        authState = reload.authState
+        auth = authState.auth
+        accessToken = auth.tokens.access_token
+        accountId = auth.tokens.account_id
+        let refreshed = null
+        if (needsRefresh(ctx, auth, nowMs)) {
+          try {
+            refreshed = refreshToken(ctx, authState)
+          } catch (e) {
+            if (!isAuthFallbackError(e)) throw e
+            proactiveRefreshAuthError = e
+            ctx.host.log.warn("proactive refresh failed, trying existing token: " + String(e))
+          }
+        }
         if (refreshed) {
           accessToken = refreshed
-        } else {
+        } else if (!proactiveRefreshAuthError) {
           ctx.host.log.warn("proactive refresh failed, trying with existing token")
         }
       }
 
       let resp
       let didRefresh = false
+      let didReloadAuth = false
       try {
         resp = ctx.util.retryOnceOnAuth({
           request: (token) => {
@@ -479,6 +552,19 @@
             }
           },
           refresh: () => {
+            const reload = reloadAuthState(ctx, authState)
+            if (reload.status === "error") throw reload.error
+            if (reload.status === "changed") {
+              authState = reload.authState
+              auth = authState.auth
+              accessToken = auth.tokens.access_token
+              accountId = auth.tokens.account_id
+              proactiveRefreshAuthError = null
+              didReloadAuth = true
+              ctx.host.log.info("usage returned 401, retrying with reloaded auth")
+              return accessToken
+            }
+            if (proactiveRefreshAuthError) throw proactiveRefreshAuthError
             ctx.host.log.info("usage returned 401, attempting refresh")
             didRefresh = true
             return refreshToken(ctx, authState)
@@ -488,6 +574,20 @@
         if (typeof e === "string") throw e
         ctx.host.log.error("usage request failed: " + String(e))
         throw ERR_USAGE_CONNECTION
+      }
+
+      if (didReloadAuth && ctx.util.isAuthStatus(resp.status)) {
+        ctx.host.log.info("reloaded auth returned 401, attempting refresh")
+        didRefresh = true
+        const refreshed = refreshToken(ctx, authState)
+        if (refreshed) {
+          try {
+            resp = fetchUsage(ctx, refreshed, accountId)
+          } catch (e) {
+            ctx.host.log.error("usage request exception after reloaded auth refresh: " + String(e))
+            throw ERR_USAGE_AFTER_REFRESH
+          }
+        }
       }
 
       if (ctx.util.isAuthStatus(resp.status)) {
