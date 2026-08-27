@@ -113,6 +113,12 @@ export const makeCtx = () => {
       if (opts.subtitle) line.subtitle = opts.subtitle
       return line
     },
+    heatmap: (opts) => {
+      const line = { type: "heatmap", label: opts.label, days: opts.days }
+      if (opts.format) line.format = opts.format
+      if (opts.color) line.color = opts.color
+      return line
+    },
   }
 
   ctx.fmt = {

@@ -398,12 +398,17 @@ describe("claude plugin", () => {
         five_hour: { utilization: 10, resets_at: "2099-01-01T00:00:00.000Z" },
       }),
     })
+    const recentDate = new Date()
+    recentDate.setDate(recentDate.getDate() - 3)
+    const recentKey = recentDate.getFullYear() + "-" +
+      String(recentDate.getMonth() + 1).padStart(2, "0") + "-" +
+      String(recentDate.getDate()).padStart(2, "0")
     ctx.host.ccusage.query = vi.fn(() => ({
       status: "ok",
       data: {
         daily: [
           {
-            date: "2024-01-01",
+            date: recentKey,
             inputTokens: 100,
             outputTokens: 50,
             cacheCreationTokens: 0,
@@ -1609,6 +1614,12 @@ describe("claude plugin", () => {
       return year + month + day
     }
 
+    function daysAgoKey(days) {
+      const date = new Date()
+      date.setDate(date.getDate() - days)
+      return localDayKey(date)
+    }
+
     it("omits token lines when ccusage reports no_runner", async () => {
       const ctx = makeProbeCtx({ ccusageResult: { status: "no_runner" } })
       const plugin = await loadPlugin()
@@ -1752,12 +1763,12 @@ describe("claude plugin", () => {
       }
     })
 
-    it("adds Last 30 Days line summing all daily entries", async () => {
+    it("adds Last 30 Days line summing entries within the 31-day window", async () => {
       const todayKey = localDayKey(new Date())
       const ctx = makeProbeCtx({
         ccusageResult: okUsage([
             { date: todayKey, inputTokens: 100, outputTokens: 50, cacheCreationTokens: 0, cacheReadTokens: 0, totalTokens: 150, totalCost: 0.5 },
-            { date: "2026-02-01", inputTokens: 200, outputTokens: 100, cacheCreationTokens: 0, cacheReadTokens: 0, totalTokens: 300, totalCost: 1.0 },
+            { date: daysAgoKey(10), inputTokens: 200, outputTokens: 100, cacheCreationTokens: 0, cacheReadTokens: 0, totalTokens: 300, totalCost: 1.0 },
           ]),
       })
       const plugin = await loadPlugin()
@@ -1768,10 +1779,68 @@ describe("claude plugin", () => {
       expect(last30.value).toContain("$1.50")
     })
 
+    it("excludes entries older than 31 days from Last 30 Days (regression)", async () => {
+      const todayKey = localDayKey(new Date())
+      const ctx = makeProbeCtx({
+        ccusageResult: okUsage([
+            { date: todayKey, inputTokens: 100, outputTokens: 50, cacheCreationTokens: 0, cacheReadTokens: 0, totalTokens: 150, totalCost: 0.5 },
+            { date: daysAgoKey(60), inputTokens: 200, outputTokens: 100, cacheCreationTokens: 0, cacheReadTokens: 0, totalTokens: 300, totalCost: 1.0 },
+          ]),
+      })
+      const plugin = await loadPlugin()
+      const result = plugin.probe(ctx)
+      const last30 = result.lines.find((l) => l.label === "Last 30 Days")
+      expect(last30).toBeTruthy()
+      expect(last30.value).toContain("150 tokens")
+      expect(last30.value).toContain("$0.50")
+    })
+
+    it("emits an Activity heatmap line with per-day cost values", async () => {
+      const todayKey = localDayKey(new Date())
+      const oldKey = daysAgoKey(60)
+      const ctx = makeProbeCtx({
+        ccusageResult: okUsage([
+            { date: todayKey, inputTokens: 100, outputTokens: 50, cacheCreationTokens: 0, cacheReadTokens: 0, totalTokens: 150, totalCost: 0.5 },
+            { date: oldKey, inputTokens: 200, outputTokens: 100, cacheCreationTokens: 0, cacheReadTokens: 0, totalTokens: 300, totalCost: 1.25 },
+          ]),
+      })
+      const plugin = await loadPlugin()
+      const result = plugin.probe(ctx)
+      const heatmap = result.lines.find((l) => l.type === "heatmap")
+      expect(heatmap).toBeTruthy()
+      expect(heatmap.label).toBe("Activity")
+      expect(heatmap.format).toEqual({ kind: "dollars" })
+      expect(heatmap.days).toEqual([
+        { date: todayKey, value: 0.5 },
+        { date: oldKey, value: 1.25 },
+      ])
+    })
+
+    it("uses zero heatmap value when a day has no cost", async () => {
+      const todayKey = localDayKey(new Date())
+      const ctx = makeProbeCtx({
+        ccusageResult: okUsage([
+            { date: todayKey, inputTokens: 100, outputTokens: 50, cacheCreationTokens: 0, cacheReadTokens: 0, totalTokens: 150, totalCost: null },
+          ]),
+      })
+      const plugin = await loadPlugin()
+      const result = plugin.probe(ctx)
+      const heatmap = result.lines.find((l) => l.type === "heatmap")
+      expect(heatmap).toBeTruthy()
+      expect(heatmap.days).toEqual([{ date: todayKey, value: 0 }])
+    })
+
+    it("omits the Activity heatmap when ccusage fails", async () => {
+      const ctx = makeProbeCtx({ ccusageResult: { status: "runner_failed" } })
+      const plugin = await loadPlugin()
+      const result = plugin.probe(ctx)
+      expect(result.lines.find((l) => l.type === "heatmap")).toBeUndefined()
+    })
+
     it("shows empty Today/Yesterday and Last 30 Days when today has no entry", async () => {
       const ctx = makeProbeCtx({
         ccusageResult: okUsage([
-            { date: "2026-02-01", inputTokens: 500, outputTokens: 100, cacheCreationTokens: 0, cacheReadTokens: 0, totalTokens: 600, totalCost: 2.0 },
+            { date: daysAgoKey(10), inputTokens: 500, outputTokens: 100, cacheCreationTokens: 0, cacheReadTokens: 0, totalTokens: 600, totalCost: 2.0 },
           ]),
       })
       const plugin = await loadPlugin()
@@ -1864,7 +1933,7 @@ describe("claude plugin", () => {
       expect(ctx.host.ccusage.query).toHaveBeenCalledTimes(2)
     })
 
-    it("queries ccusage with a 31-day inclusive since window", async () => {
+    it("queries ccusage with a 147-day inclusive since window", async () => {
       vi.useFakeTimers()
       vi.setSystemTime(new Date("2026-02-20T16:00:00.000Z"))
       try {
@@ -1875,7 +1944,7 @@ describe("claude plugin", () => {
 
         const firstCall = ctx.host.ccusage.query.mock.calls[0][0]
         const since = new Date()
-        since.setDate(since.getDate() - 30)
+        since.setDate(since.getDate() - 146)
         expect(firstCall.since).toBe(localCompactDayKey(since))
       } finally {
         vi.useRealTimers()
@@ -1935,7 +2004,7 @@ describe("claude plugin", () => {
             totalCost: 0.5,
           },
           {
-            date: "2026-02-01",
+            date: daysAgoKey(10),
             inputTokens: 0,
             outputTokens: 0,
             cacheCreationTokens: 0,

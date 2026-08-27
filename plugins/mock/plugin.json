@@ -18,6 +18,7 @@
     { "type": "progress", "label": "Tiny sliver", "scope": "overview", "primaryOrder": 9 },
     { "type": "progress", "label": "Almost full", "scope": "overview", "primaryOrder": 10 },
     { "type": "progress", "label": "Expired reset", "scope": "overview", "primaryOrder": 11 },
+    { "type": "heatmap", "label": "Activity", "scope": "detail" },
     { "type": "text", "label": "Status", "scope": "overview" },
     { "type": "text", "label": "Very long value", "scope": "overview" },
     { "type": "text", "label": "", "scope": "overview" },

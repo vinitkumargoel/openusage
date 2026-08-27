@@ -3,6 +3,8 @@ export type ProgressFormat =
   | { kind: "dollars" }
   | { kind: "count"; suffix: string }
 
+export type HeatmapDay = { date: string; value: number }
+
 export type MetricLine =
   | { type: "text"; label: string; value: string; color?: string; subtitle?: string }
   | {
@@ -16,9 +18,16 @@ export type MetricLine =
       color?: string
     }
   | { type: "badge"; label: string; text: string; color?: string; subtitle?: string }
+  | {
+      type: "heatmap"
+      label: string
+      days: HeatmapDay[]
+      format?: ProgressFormat | null
+      color?: string
+    }
 
 export type ManifestLine = {
-  type: "text" | "progress" | "badge"
+  type: "text" | "progress" | "badge" | "heatmap"
   label: string
   scope: "overview" | "detail"
 }

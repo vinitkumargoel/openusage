@@ -399,11 +399,51 @@ describe("codex plugin", () => {
       const firstCall = ctx.host.ccusage.query.mock.calls[0][0]
       expect(firstCall.provider).toBe("codex")
       const since = new Date()
-      since.setDate(since.getDate() - 30)
+      since.setDate(since.getDate() - 146)
       const sinceYear = String(since.getFullYear())
       const sinceMonth = String(since.getMonth() + 1).padStart(2, "0")
       const sinceDay = String(since.getDate()).padStart(2, "0")
       expect(firstCall.since).toBe(sinceYear + sinceMonth + sinceDay)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("emits an Activity heatmap line with per-day cost values", async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-02-20T16:00:00.000Z"))
+
+    const ctx = makeCtx()
+    ctx.host.fs.writeText("~/.codex/auth.json", JSON.stringify({
+      tokens: { access_token: "token" },
+      last_refresh: new Date().toISOString(),
+    }))
+    ctx.host.http.request.mockReturnValue({
+      status: 200,
+      headers: { "x-codex-primary-used-percent": "10" },
+      bodyText: JSON.stringify({}),
+    })
+    ctx.host.ccusage.query.mockReturnValue({
+      status: "ok",
+      data: {
+        daily: [
+        { date: "Feb 20, 2026", totalTokens: 150, costUSD: 0.75 },
+        { date: "Feb 01, 2026", totalTokens: 300, costUSD: 1.0 },
+        ],
+      },
+    })
+
+    try {
+      const plugin = await loadPlugin()
+      const result = plugin.probe(ctx)
+      const heatmap = result.lines.find((l) => l.type === "heatmap")
+      expect(heatmap).toBeTruthy()
+      expect(heatmap.label).toBe("Activity")
+      expect(heatmap.format).toEqual({ kind: "dollars" })
+      expect(heatmap.days).toEqual([
+        { date: "2026-02-20", value: 0.75 },
+        { date: "2026-02-01", value: 1.0 },
+      ])
     } finally {
       vi.useRealTimers()
     }
@@ -526,11 +566,15 @@ describe("codex plugin", () => {
       headers: { "x-codex-primary-used-percent": "10" },
       bodyText: JSON.stringify({}),
     })
+    const recent = new Date()
+    recent.setDate(recent.getDate() - 10)
+    const recentKey = recent.toLocaleString("en-US", { month: "short" }) + " " +
+      String(recent.getDate()).padStart(2, "0") + ", " + recent.getFullYear()
     ctx.host.ccusage.query.mockReturnValue({
       status: "ok",
       data: {
         daily: [
-        { date: "Feb 01, 2026", totalTokens: 300, costUSD: 1.0 },
+        { date: recentKey, totalTokens: 300, costUSD: 1.0 },
         ],
       },
     })

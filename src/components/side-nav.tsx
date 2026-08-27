@@ -27,7 +27,7 @@ function GaugeIcon({ className }: { className?: string }) {
   )
 }
 import { cn } from "@/lib/utils"
-import { getRelativeLuminance } from "@/lib/color"
+import { adjustBrandColor } from "@/lib/color"
 import { useDarkMode } from "@/hooks/use-dark-mode"
 
 type ActiveView = "home" | "settings" | string
@@ -79,11 +79,7 @@ function NavButton({ isActive, onClick, onContextMenu, children, "aria-label": a
 }
 
 function getIconColor(brandColor: string | undefined, isDark: boolean): string {
-  if (!brandColor) return "currentColor"
-  const luminance = getRelativeLuminance(brandColor)
-  if (isDark && luminance < 0.15) return "#ffffff"
-  if (!isDark && luminance > 0.85) return "currentColor"
-  return brandColor
+  return adjustBrandColor(brandColor, isDark, "currentColor")
 }
 
 interface SortableNavPluginProps {

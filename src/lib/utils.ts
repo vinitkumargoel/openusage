@@ -26,3 +26,10 @@ export function formatCountNumber(value: number): string {
   const maximumFractionDigits = Number.isInteger(value) ? 0 : 2
   return new Intl.NumberFormat("en-US", { maximumFractionDigits }).format(value)
 }
+
+/** Local-date key in YYYY-MM-DD form, e.g. "2026-08-27". */
+export function formatDayKey(date: Date): string {
+  const month = date.getMonth() + 1
+  const day = date.getDate()
+  return `${date.getFullYear()}-${month < 10 ? "0" : ""}${month}-${day < 10 ? "0" : ""}${day}`
+}

@@ -92,7 +92,7 @@ loading skeletons instantly while probes execute asynchronously.
 
 | Field     | Type    | Required | Description                                       |
 |-----------|---------|----------|---------------------------------------------------|
-| `type`    | string  | Yes      | One of: `text`, `progress`, `badge`               |
+| `type`    | string  | Yes      | One of: `text`, `progress`, `badge`, `heatmap`    |
 | `label`   | string  | Yes      | Static label shown in the UI for this line        |
 | `scope`   | string  | Yes      | `"overview"` or `"detail"` - where line appears   |
 | `primary` | boolean | No       | If `true`, this progress line appears in tray icon |

@@ -7,6 +7,7 @@ import { Progress } from "@/components/ui/progress"
 import { Separator } from "@/components/ui/separator"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { SkeletonLines } from "@/components/skeleton-lines"
+import { UsageHeatmap } from "@/components/usage-heatmap"
 import { PluginError } from "@/components/plugin-error"
 import { useNowTicker } from "@/hooks/use-now-ticker"
 import { REFRESH_COOLDOWN_MS, type DisplayMode, type ResetTimerDisplayMode, type TimeFormatMode } from "@/lib/settings"
@@ -20,6 +21,7 @@ import { formatResetAbsoluteLabel, formatResetRelativeLabel, formatResetTooltipT
 interface ProviderCardProps {
   name: string
   plan?: string
+  brandColor?: string
   links?: PluginLink[]
   showSeparator?: boolean
   loading?: boolean
@@ -95,6 +97,7 @@ function formatRelativeTime(diffMs: number): string {
 export function ProviderCard({
   name,
   plan,
+  brandColor,
   links = [],
   showSeparator = true,
   loading = false,
@@ -311,6 +314,7 @@ export function ProviderCard({
                     <MetricLineRenderer
                       key={`${line.label}-${gi}-${li}`}
                       line={line}
+                      brandColor={brandColor}
                       displayMode={displayMode}
                       resetTimerDisplayMode={resetTimerDisplayMode}
                       timeFormatMode={timeFormatMode}
@@ -326,6 +330,7 @@ export function ProviderCard({
                     <MetricLineRenderer
                       key={`${line.label}-${gi}-${li}`}
                       line={line}
+                      brandColor={brandColor}
                       displayMode={displayMode}
                       resetTimerDisplayMode={resetTimerDisplayMode}
                       timeFormatMode={timeFormatMode}
@@ -348,6 +353,7 @@ export function ProviderCard({
 
 function MetricLineRenderer({
   line,
+  brandColor,
   displayMode,
   resetTimerDisplayMode,
   timeFormatMode,
@@ -356,6 +362,7 @@ function MetricLineRenderer({
   refreshing,
 }: {
   line: MetricLine
+  brandColor?: string
   displayMode: DisplayMode
   resetTimerDisplayMode: ResetTimerDisplayMode
   timeFormatMode: TimeFormatMode
@@ -363,6 +370,19 @@ function MetricLineRenderer({
   now: number
   refreshing?: boolean
 }) {
+  if (line.type === "heatmap") {
+    return (
+      <div>
+        <div className="text-sm font-medium mb-1.5">{line.label}</div>
+        <UsageHeatmap
+          days={line.days}
+          format={line.format}
+          brandColor={line.color ?? brandColor}
+        />
+      </div>
+    )
+  }
+
   if (line.type === "text") {
     return (
       <div>

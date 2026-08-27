@@ -2,6 +2,23 @@ function sRGBtoLinear(c: number) {
   return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
 }
 
+/**
+ * Adjusts a brand color for legibility against the current theme:
+ * near-black brands become white in dark mode, near-white brands fall back
+ * in light mode. Everything else passes through unchanged.
+ */
+export function adjustBrandColor(
+  brandColor: string | undefined,
+  isDark: boolean,
+  fallback: string
+): string {
+  if (!brandColor) return fallback
+  const luminance = getRelativeLuminance(brandColor)
+  if (isDark && luminance < 0.15) return "#ffffff"
+  if (!isDark && luminance > 0.85) return fallback
+  return brandColor
+}
+
 export function getRelativeLuminance(hex: string): number {
   let h = hex.startsWith("#") ? hex.slice(1) : hex
   if (h.length === 3 || h.length === 4) {

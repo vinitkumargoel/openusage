@@ -379,8 +379,10 @@
     }
 
     const since = new Date()
-    // Inclusive range: today + previous 30 days = 31 calendar days.
-    since.setDate(since.getDate() - 30)
+    // Inclusive range: today + previous 146 days = 147 calendar days (~21
+    // weeks) to feed the 20-week Activity heatmap. The Today / Yesterday /
+    // Last 30 Days lines re-filter to their own windows.
+    since.setDate(since.getDate() - 146)
     const y = since.getFullYear()
     const m = since.getMonth() + 1
     const d = since.getDate()
@@ -755,14 +757,35 @@
           }
         }
 
+        const heatmapDays = []
+        for (let i = 0; i < tokenUsage.daily.length; i++) {
+          const usageDayKey = dayKeyFromUsageDate(tokenUsage.daily[i].date)
+          if (!usageDayKey) continue
+          const dayCost = usageCostUsd(tokenUsage.daily[i])
+          heatmapDays.push({ date: usageDayKey, value: dayCost != null ? dayCost : 0 })
+        }
+        if (heatmapDays.length > 0) {
+          lines.push(ctx.line.heatmap({
+            label: "Activity",
+            days: heatmapDays,
+            format: { kind: "dollars" }
+          }))
+        }
+
         pushDayUsageLine(lines, ctx, "Today", todayEntry)
         pushDayUsageLine(lines, ctx, "Yesterday", yesterdayEntry)
 
+        // The query window is ~147 days for the heatmap; this line stays 31 days.
+        const thirtyDaysAgo = new Date(now.getTime())
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+        const thirtyDaysAgoKey = dayKeyFromDate(thirtyDaysAgo)
         let totalTokens = 0
         let totalCostNanos = 0
         let hasCost = false
         for (let i = 0; i < tokenUsage.daily.length; i++) {
           const day = tokenUsage.daily[i]
+          const usageDayKey = dayKeyFromUsageDate(day.date)
+          if (!usageDayKey || usageDayKey < thirtyDaysAgoKey) continue
           const dayTokens = Number(day.totalTokens)
           if (Number.isFinite(dayTokens)) {
             totalTokens += dayTokens

@@ -425,6 +425,36 @@ ctx.line.badge({ label: "Plan", text: "Pro", color: "#000000" })
 ctx.line.badge({ label: "Status", text: "Connected", color: "#22c55e" })
 ```
 
+### `ctx.line.heatmap(opts)`
+
+Creates a GitHub-style activity heatmap line (detail page). Cells are tinted
+with the plugin's `brandColor`; intensity comes from quartiles of the non-zero
+values, so any unit works.
+
+```typescript
+ctx.line.heatmap({
+  label: string,                    // Required: label shown above the grid
+  days: [                           // Required: one entry per day with usage
+    { date: string, value: number } // date must be "YYYY-MM-DD"; value >= 0
+  ],                                // max 400 entries; extra entries are dropped
+  format?: ProgressFormat,          // Optional: how tooltips format the value
+  color?: string                    // Optional: overrides the brand color
+}): MetricLine
+```
+
+The frontend renders the last 20 weeks; days without an entry show as empty
+cells. Send ~147 days of history to fill the grid.
+
+**Example:**
+
+```javascript
+ctx.line.heatmap({
+  label: "Activity",
+  days: [{ date: "2026-08-27", value: 4.31 }],
+  format: { kind: "dollars" },
+})
+```
+
 ## Formatters
 
 Helper functions for formatting values.

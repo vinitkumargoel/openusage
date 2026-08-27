@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { getRelativeLuminance } from "@/lib/color"
+import { adjustBrandColor, getRelativeLuminance } from "@/lib/color"
 
 describe("getRelativeLuminance", () => {
   it("returns 0 for invalid hex", () => {
@@ -21,6 +21,27 @@ describe("getRelativeLuminance", () => {
     const lum2 = getRelativeLuminance("#00000000")
     expect(lum1).toBe(0)
     expect(lum2).toBe(0)
+  })
+})
+
+describe("adjustBrandColor", () => {
+  it("returns the fallback when no brand color is set", () => {
+    expect(adjustBrandColor(undefined, false, "currentColor")).toBe("currentColor")
+  })
+
+  it("turns near-black brands white in dark mode", () => {
+    expect(adjustBrandColor("#000000", true, "currentColor")).toBe("#ffffff")
+    expect(adjustBrandColor("#000000", false, "currentColor")).toBe("#000000")
+  })
+
+  it("falls back for near-white brands in light mode", () => {
+    expect(adjustBrandColor("#ffffff", false, "currentColor")).toBe("currentColor")
+    expect(adjustBrandColor("#ffffff", true, "currentColor")).toBe("#ffffff")
+  })
+
+  it("passes normal brand colors through", () => {
+    expect(adjustBrandColor("#DE7356", false, "currentColor")).toBe("#DE7356")
+    expect(adjustBrandColor("#DE7356", true, "currentColor")).toBe("#DE7356")
   })
 })
 

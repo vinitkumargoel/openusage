@@ -989,6 +989,12 @@ pub fn inject_utils(ctx: &rquickjs::Ctx<'_>) -> rquickjs::Result<()> {
                     if (opts.color) line.color = opts.color;
                     if (opts.subtitle) line.subtitle = opts.subtitle;
                     return line;
+                },
+                heatmap: function(opts) {
+                    var line = { type: "heatmap", label: opts.label, days: opts.days };
+                    if (opts.format) line.format = opts.format;
+                    if (opts.color) line.color = opts.color;
+                    return line;
                 }
             };
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { PluginOutput } from "@/lib/plugin-types"
 import type { PluginState } from "@/hooks/app/types"
+import { recordUsageSnapshot } from "@/lib/usage-history"
 
 type UseProbeStateArgs = {
   onProbeResult?: () => void
@@ -78,6 +79,12 @@ export function useProbeState({ onProbeResult }: UseProbeStateArgs) {
       const isManual = manualRefreshIdsRef.current.has(output.providerId)
       if (isManual) {
         manualRefreshIdsRef.current.delete(output.providerId)
+      }
+
+      if (!errorMessage) {
+        void recordUsageSnapshot(output.providerId, output.lines).catch((error) => {
+          console.error("Failed to record usage snapshot:", error)
+        })
       }
 
       const now = Date.now()

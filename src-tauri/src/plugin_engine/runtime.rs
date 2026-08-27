@@ -41,7 +41,23 @@ pub enum MetricLine {
         color: Option<String>,
         subtitle: Option<String>,
     },
+    Heatmap {
+        label: String,
+        days: Vec<HeatmapDay>,
+        format: Option<ProgressFormat>,
+        color: Option<String>,
+    },
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HeatmapDay {
+    pub date: String,
+    pub value: f64,
+}
+
+/// Cap on heatmap day entries per line — protects the IPC payload. ~400 days
+/// covers a full year of history with room to spare.
+const MAX_HEATMAP_DAYS: usize = 400;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -487,6 +503,38 @@ fn parse_lines(result: &Object) -> Result<Vec<MetricLine>, String> {
                     subtitle,
                 });
             }
+            "heatmap" => {
+                let days_array: Array = match line.get("days") {
+                    Ok(arr) => arr,
+                    Err(_) => {
+                        out.push(error_line(format!(
+                            "heatmap line at index {} missing days array",
+                            idx
+                        )));
+                        continue;
+                    }
+                };
+                let days = match parse_heatmap_days(&days_array, idx) {
+                    Ok(days) => days,
+                    Err(msg) => {
+                        out.push(error_line(msg));
+                        continue;
+                    }
+                };
+                let format = match parse_heatmap_format(&line, idx) {
+                    Ok(format) => format,
+                    Err(msg) => {
+                        out.push(error_line(msg));
+                        continue;
+                    }
+                };
+                out.push(MetricLine::Heatmap {
+                    label,
+                    days,
+                    format,
+                    color,
+                });
+            }
             _ => {
                 out.push(error_line(format!(
                     "unknown line type at index {}: {}",
@@ -497,6 +545,119 @@ fn parse_lines(result: &Object) -> Result<Vec<MetricLine>, String> {
     }
 
     Ok(out)
+}
+
+/// Day keys must be YYYY-MM-DD so the frontend can match them by string.
+fn is_valid_day_key(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    if bytes.len() != 10 {
+        return false;
+    }
+    bytes.iter().enumerate().all(|(i, b)| match i {
+        4 | 7 => *b == b'-',
+        _ => b.is_ascii_digit(),
+    })
+}
+
+fn parse_heatmap_days(days_array: &Array, line_idx: usize) -> Result<Vec<HeatmapDay>, String> {
+    let total = days_array.len();
+    let take = total.min(MAX_HEATMAP_DAYS);
+    if total > MAX_HEATMAP_DAYS {
+        log::warn!(
+            "heatmap line at index {} has {} days, keeping first {}",
+            line_idx,
+            total,
+            MAX_HEATMAP_DAYS
+        );
+    }
+
+    let mut days = Vec::with_capacity(take);
+    for day_idx in 0..take {
+        let entry: Object = days_array.get(day_idx).map_err(|_| {
+            format!(
+                "heatmap line at index {}: invalid day at index {}",
+                line_idx, day_idx
+            )
+        })?;
+        let date: String = entry.get("date").map_err(|_| {
+            format!(
+                "heatmap line at index {}: day at index {} missing date",
+                line_idx, day_idx
+            )
+        })?;
+        if !is_valid_day_key(&date) {
+            return Err(format!(
+                "heatmap line at index {}: day at index {} has invalid date '{}' (expected YYYY-MM-DD)",
+                line_idx, day_idx, date
+            ));
+        }
+        let value_raw: Value = entry.get("value").map_err(|_| {
+            format!(
+                "heatmap line at index {}: day at index {} missing value",
+                line_idx, day_idx
+            )
+        })?;
+        let value = value_raw.as_number().ok_or_else(|| {
+            format!(
+                "heatmap line at index {}: day at index {} invalid value (expected number)",
+                line_idx, day_idx
+            )
+        })?;
+        if !value.is_finite() || value < 0.0 {
+            return Err(format!(
+                "heatmap line at index {}: day at index {} invalid value: {}",
+                line_idx, day_idx, value
+            ));
+        }
+        days.push(HeatmapDay { date, value });
+    }
+    Ok(days)
+}
+
+fn parse_heatmap_format(line: &Object, line_idx: usize) -> Result<Option<ProgressFormat>, String> {
+    let format_value: Value = match line.get("format") {
+        Ok(v) => v,
+        Err(_) => return Ok(None),
+    };
+    if format_value.is_null() || format_value.is_undefined() {
+        return Ok(None);
+    }
+    let format_obj = format_value.into_object().ok_or_else(|| {
+        format!(
+            "heatmap line at index {}: format must be an object",
+            line_idx
+        )
+    })?;
+    let kind: String = format_obj.get("kind").map_err(|_| {
+        format!(
+            "heatmap line at index {}: format missing kind",
+            line_idx
+        )
+    })?;
+    match kind.as_str() {
+        "percent" => Ok(Some(ProgressFormat::Percent)),
+        "dollars" => Ok(Some(ProgressFormat::Dollars)),
+        "count" => {
+            let suffix: String = format_obj.get("suffix").map_err(|_| {
+                format!(
+                    "heatmap line at index {}: count format missing suffix",
+                    line_idx
+                )
+            })?;
+            let suffix = suffix.trim().to_string();
+            if suffix.is_empty() {
+                return Err(format!(
+                    "heatmap line at index {}: count format suffix must be non-empty",
+                    line_idx
+                ));
+            }
+            Ok(Some(ProgressFormat::Count { suffix }))
+        }
+        other => Err(format!(
+            "heatmap line at index {} invalid format.kind: {}",
+            line_idx, other
+        )),
+    }
 }
 
 fn error_output(plugin: &LoadedPlugin, message: String) -> PluginOutput {
@@ -656,5 +817,161 @@ mod tests {
             obj.get("resets_at").is_none(),
             "did not expect resets_at key"
         );
+    }
+
+    #[test]
+    fn heatmap_line_parses_days_and_format() {
+        let plugin = test_plugin(
+            r#"
+            globalThis.__openusage_plugin = {
+                probe() {
+                    return { lines: [{
+                        type: "heatmap",
+                        label: "Activity",
+                        days: [
+                            { date: "2026-08-27", value: 4.31 },
+                            { date: "2026-08-26", value: 0 }
+                        ],
+                        format: { kind: "dollars" }
+                    }] };
+                }
+            };
+            "#,
+        );
+        let output = run_probe(&plugin, &temp_app_dir("heatmap-ok"), "0.0.0");
+        match &output.lines[0] {
+            MetricLine::Heatmap {
+                label,
+                days,
+                format,
+                ..
+            } => {
+                assert_eq!(label, "Activity");
+                assert_eq!(days.len(), 2);
+                assert_eq!(days[0].date, "2026-08-27");
+                assert!((days[0].value - 4.31).abs() < 1e-9);
+                assert_eq!(days[1].value, 0.0);
+                assert!(matches!(format, Some(ProgressFormat::Dollars)));
+            }
+            other => panic!("expected heatmap line, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn heatmap_line_without_format_parses_as_none() {
+        let plugin = test_plugin(
+            r#"
+            globalThis.__openusage_plugin = {
+                probe() {
+                    return { lines: [{
+                        type: "heatmap",
+                        label: "Activity",
+                        days: [{ date: "2026-08-27", value: 1 }]
+                    }] };
+                }
+            };
+            "#,
+        );
+        let output = run_probe(&plugin, &temp_app_dir("heatmap-nofmt"), "0.0.0");
+        match &output.lines[0] {
+            MetricLine::Heatmap { format, .. } => assert!(format.is_none()),
+            other => panic!("expected heatmap line, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn heatmap_line_with_invalid_date_becomes_error_line() {
+        let plugin = test_plugin(
+            r#"
+            globalThis.__openusage_plugin = {
+                probe() {
+                    return { lines: [{
+                        type: "heatmap",
+                        label: "Activity",
+                        days: [{ date: "Feb 12, 2026", value: 1 }]
+                    }] };
+                }
+            };
+            "#,
+        );
+        let output = run_probe(&plugin, &temp_app_dir("heatmap-baddate"), "0.0.0");
+        assert!(error_text(output).contains("invalid date"));
+    }
+
+    #[test]
+    fn heatmap_line_with_negative_value_becomes_error_line() {
+        let plugin = test_plugin(
+            r#"
+            globalThis.__openusage_plugin = {
+                probe() {
+                    return { lines: [{
+                        type: "heatmap",
+                        label: "Activity",
+                        days: [{ date: "2026-08-27", value: -1 }]
+                    }] };
+                }
+            };
+            "#,
+        );
+        let output = run_probe(&plugin, &temp_app_dir("heatmap-negative"), "0.0.0");
+        assert!(error_text(output).contains("invalid value"));
+    }
+
+    #[test]
+    fn heatmap_line_missing_days_becomes_error_line() {
+        let plugin = test_plugin(
+            r#"
+            globalThis.__openusage_plugin = {
+                probe() {
+                    return { lines: [{ type: "heatmap", label: "Activity" }] };
+                }
+            };
+            "#,
+        );
+        let output = run_probe(&plugin, &temp_app_dir("heatmap-nodays"), "0.0.0");
+        assert!(error_text(output).contains("missing days"));
+    }
+
+    #[test]
+    fn heatmap_days_are_capped_at_400_entries() {
+        let plugin = test_plugin(
+            r#"
+            globalThis.__openusage_plugin = {
+                probe() {
+                    var days = [];
+                    for (var i = 0; i < 401; i++) {
+                        days.push({ date: "2026-01-01", value: 1 });
+                    }
+                    return { lines: [{ type: "heatmap", label: "Activity", days: days }] };
+                }
+            };
+            "#,
+        );
+        let output = run_probe(&plugin, &temp_app_dir("heatmap-cap"), "0.0.0");
+        match &output.lines[0] {
+            MetricLine::Heatmap { days, .. } => assert_eq!(days.len(), 400),
+            other => panic!("expected heatmap line, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn heatmap_line_serializes_with_camelcase_tag() {
+        let line = MetricLine::Heatmap {
+            label: "Activity".to_string(),
+            days: vec![HeatmapDay {
+                date: "2026-08-27".to_string(),
+                value: 4.31,
+            }],
+            format: Some(ProgressFormat::Dollars),
+            color: None,
+        };
+        let json: JsonValue = serde_json::to_value(&line).expect("serialize");
+        let obj = json.as_object().expect("object");
+        assert_eq!(obj.get("type").and_then(|v| v.as_str()), Some("heatmap"));
+        let day = obj.get("days").and_then(|v| v.as_array()).expect("days")[0]
+            .as_object()
+            .expect("day object");
+        assert_eq!(day.get("date").and_then(|v| v.as_str()), Some("2026-08-27"));
+        assert!(day.get("value").is_some());
     }
 }

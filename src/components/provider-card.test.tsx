@@ -76,6 +76,33 @@ describe("ProviderCard", () => {
     expect(screen.getByText("Two")).toBeInTheDocument()
   })
 
+  it("renders a heatmap line with brand-colored cells", () => {
+    const today = new Date()
+    const month = String(today.getMonth() + 1).padStart(2, "0")
+    const day = String(today.getDate()).padStart(2, "0")
+    const todayKey = `${today.getFullYear()}-${month}-${day}`
+    render(
+      <ProviderCard
+        name="Claude"
+        displayMode="used"
+        brandColor="#DE7356"
+        lines={[
+          {
+            type: "heatmap",
+            label: "Activity",
+            days: [{ date: todayKey, value: 3 }],
+            format: { kind: "dollars" },
+          },
+        ]}
+      />
+    )
+    expect(screen.getByText("Activity")).toBeInTheDocument()
+    expect(screen.getByText("Less")).toBeInTheDocument()
+    expect(screen.getByText("More")).toBeInTheDocument()
+    const cell = screen.getByLabelText(/\$3\.00/)
+    expect(cell.style.background).toContain("#DE7356")
+  })
+
   it("shows loading spinner when retry is enabled", () => {
     const { container } = render(
       <ProviderCard

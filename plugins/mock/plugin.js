@@ -21,6 +21,37 @@
     return line
   }
 
+  function lineHeatmap(opts) {
+    var line = { type: "heatmap", label: opts.label, days: opts.days }
+    if (opts.format) line.format = opts.format
+    if (opts.color) line.color = opts.color
+    return line
+  }
+
+  // Deterministic 147-day pattern: weekday waves, light weekends, a 10-day
+  // gap, and a heavy streak — exercises all heatmap intensity levels.
+  function mockHeatmapDays() {
+    var days = []
+    var today = new Date()
+    for (var i = 146; i >= 0; i--) {
+      var d = new Date(today.getFullYear(), today.getMonth(), today.getDate() - i)
+      var age = 146 - i
+      var dow = d.getDay()
+      var value = 0
+      if (age >= 60 && age <= 69) value = 0
+      else if (age >= 100 && age <= 112) value = 18 + (age % 7)
+      else if (dow === 0 || dow === 6) value = age % 3 === 0 ? 2 : 0
+      else value = 3 + ((age * 7) % 11)
+      var month = d.getMonth() + 1
+      var day = d.getDate()
+      days.push({
+        date: d.getFullYear() + "-" + (month < 10 ? "0" : "") + month + "-" + (day < 10 ? "0" : "") + day,
+        value: value,
+      })
+    }
+    return days
+  }
+
   function probe() {
     var _10m = 10 * 60 * 1000
     var _6h = 6 * 60 * 60 * 1000
@@ -60,6 +91,8 @@
         lineProgress({ label: "Reset in days", used: 43, limit: 100, format: { kind: "percent" }, resetsAt: _multiDayReset }),
         lineProgress({ label: "Reset in week+", used: 56, limit: 100, format: { kind: "percent" }, resetsAt: _weekReset }),
         lineProgress({ label: "Expired reset", used: 42, limit: 100, format: { kind: "percent" }, resetsAt: _pastReset, periodDurationMs: _30d }),
+        // Heatmap
+        lineHeatmap({ label: "Activity", days: mockHeatmapDays(), format: { kind: "dollars" } }),
         // Text lines
         lineText({ label: "Status", value: "Active" }),
         lineText({ label: "Status detail", value: "Preview build", color: "#3b82f6", subtitle: "Mock subtitle" }),

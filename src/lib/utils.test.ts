@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest"
-import { clamp01, cn } from "@/lib/utils"
+import { clamp01, cn, formatDayKey } from "@/lib/utils"
+
+describe("formatDayKey", () => {
+  it("pads month and day to two digits", () => {
+    expect(formatDayKey(new Date(2026, 0, 5))).toBe("2026-01-05")
+    expect(formatDayKey(new Date(2026, 11, 25))).toBe("2026-12-25")
+  })
+})
 
 describe("cn", () => {
   it("merges class names", () => {

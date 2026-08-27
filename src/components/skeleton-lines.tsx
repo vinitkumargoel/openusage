@@ -34,6 +34,15 @@ function SkeletonProgress({ label }: { label: string }) {
   )
 }
 
+function SkeletonHeatmap({ label }: { label: string }) {
+  return (
+    <div>
+      <div className="text-sm font-medium mb-1.5">{label}</div>
+      <Skeleton className="h-[104px] w-full rounded-md" />
+    </div>
+  )
+}
+
 export function SkeletonLine({ line }: { line: ManifestLine }) {
   switch (line.type) {
     case "text":
@@ -42,6 +51,8 @@ export function SkeletonLine({ line }: { line: ManifestLine }) {
       return <SkeletonBadge label={line.label} />
     case "progress":
       return <SkeletonProgress label={line.label} />
+    case "heatmap":
+      return <SkeletonHeatmap label={line.label} />
     default:
       return <SkeletonText label={line.label} />
   }
