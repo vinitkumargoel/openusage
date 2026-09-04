@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "antigravity-pool",
+  "name": "Antigravity Pool",
+  "version": "0.0.1",
+  "entry": "plugin.js",
+  "icon": "icon.svg",
+  "brandColor": "#4285F4",
+  "lines": [
+    { "type": "progress", "label": "Gemini weekly", "scope": "overview", "primaryOrder": 1 },
+    { "type": "progress", "label": "Gemini 5h", "scope": "overview", "primaryOrder": 2 },
+    { "type": "text", "label": "Pool", "scope": "overview" },
+    { "type": "text", "label": "Cohorts", "scope": "detail" },
+    { "type": "text", "label": "Claude & GPT", "scope": "detail" },
+    { "type": "text", "label": "Rotation", "scope": "detail" },
+    { "type": "heatmap", "label": "Requests", "scope": "detail" }
+  ]
+}

@@ -403,6 +403,12 @@ fn redact_body(body: &str) -> String {
         "userId",
         "account_id",
         "accountId",
+        // CLIProxy auth-files: the handle a pooled account is addressed by, and
+        // the Google Cloud project behind it.
+        "auth_index",
+        "authIndex",
+        "project_id",
+        "projectId",
         "team_id",
         "teamId",
         "payment_id",
@@ -3361,6 +3367,55 @@ mod tests {
         assert!(
             redacted.contains("acct...cdef"),
             "accountId should show first4...last4, got: {}",
+            redacted
+        );
+    }
+
+    /// CLIProxy's auth-files response names every pooled account by `auth_index`
+    /// and `project_id`, and response bodies get logged.
+    #[test]
+    fn redact_body_redacts_cli_proxy_account_identifiers() {
+        let body = r#"{"auth_index": "5e08993047420acb", "project_id": "alien-agency-s1ttq", "success": 571}"#;
+        let redacted = redact_body(body);
+        assert!(
+            !redacted.contains("5e08993047420acb"),
+            "auth_index should be redacted, got: {}",
+            redacted
+        );
+        assert!(
+            !redacted.contains("alien-agency-s1ttq"),
+            "project_id should be redacted, got: {}",
+            redacted
+        );
+        assert!(
+            redacted.contains("5e08...0acb"),
+            "auth_index should show first4...last4, got: {}",
+            redacted
+        );
+        assert!(
+            redacted.contains("alie...1ttq"),
+            "project_id should show first4...last4, got: {}",
+            redacted
+        );
+        assert!(
+            redacted.contains("\"success\": 571"),
+            "non-sensitive counters should survive, got: {}",
+            redacted
+        );
+    }
+
+    #[test]
+    fn redact_body_redacts_camel_case_cli_proxy_identifiers() {
+        let body = r#"{"authIndex":"a4aab92e11d5fc62","projectId":"yodeling-myth-g620j"}"#;
+        let redacted = redact_body(body);
+        assert!(
+            !redacted.contains("a4aab92e11d5fc62"),
+            "authIndex should be redacted, got: {}",
+            redacted
+        );
+        assert!(
+            !redacted.contains("yodeling-myth-g620j"),
+            "projectId should be redacted, got: {}",
             redacted
         );
     }
