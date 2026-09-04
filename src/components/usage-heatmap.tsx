@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from "react"
+import { memo, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { useDarkMode } from "@/hooks/use-dark-mode"
 import { adjustBrandColor } from "@/lib/color"
 import { formatCountNumber, formatDayKey } from "@/lib/utils"
@@ -21,6 +21,11 @@ const LEVEL_MIX_DARK = [30, 55, 80, 100]
 
 // Neutral base when a provider has no brand color; readable in both themes.
 const FALLBACK_BASE_COLOR = "#6b7280"
+
+// Tooltip sits this far above the pointer, and never closer than this to a
+// window edge.
+const TOOLTIP_GAP_PX = 10
+const TOOLTIP_EDGE_PX = 6
 
 type Cell = {
   key: string
@@ -130,21 +135,26 @@ function buildMonthLabels(cells: Cell[]): MonthLabel[] {
 }
 
 /**
- * "$4.21 · 3.4M tokens · Wed, Sep 3" — selected unit first, other unit second
- * when the plugin provides both.
+ * "$4.21 · 3.4M tokens" — selected unit first, other unit second when the
+ * plugin provides both. No date: the cell's position already says which day.
  */
 function cellTitle(cell: Cell, format: ProgressFormat | null | undefined, showTokens: boolean): string {
-  const d = cell.date
-  const day = `${DOW_LABELS[d.getDay()]}, ${MONTH_LABELS[d.getMonth()]} ${d.getDate()}`
   const primary = showTokens
     ? formatTokenCount(cell.value)
     : formatHeatmapValue(cell.value, format)
-  if (cell.value <= 0) return `${primary} · ${day}`
+  if (cell.value <= 0) return primary
 
   const alt = cell.altValue
-  if (alt === undefined || alt <= 0) return `${primary} · ${day}`
+  if (alt === undefined || alt <= 0) return primary
   const secondary = showTokens ? formatHeatmapValue(alt, format) : formatTokenCount(alt)
-  return `${primary} · ${secondary} · ${day}`
+  return `${primary} · ${secondary}`
+}
+
+/** Screen readers get the date too — they can't see which cell is hovered. */
+function cellLabel(cell: Cell, format: ProgressFormat | null | undefined, showTokens: boolean): string {
+  const d = cell.date
+  const day = `${DOW_LABELS[d.getDay()]}, ${MONTH_LABELS[d.getMonth()]} ${d.getDate()}`
+  return `${cellTitle(cell, format, showTokens)} · ${day}`
 }
 
 interface UsageHeatmapProps {
@@ -157,6 +167,23 @@ function UsageHeatmapInner({ days, format, brandColor }: UsageHeatmapProps) {
   const isDark = useDarkMode()
   const heatmapUnit = useAppPreferencesStore((state) => state.heatmapUnit)
   const [tooltip, setTooltip] = useState<{ x: number; y: number; text: string } | null>(null)
+  const tooltipRef = useRef<HTMLDivElement>(null)
+  const [tooltipPos, setTooltipPos] = useState({ left: 0, top: 0 })
+
+  // Measure after render so the tooltip can be centered above the pointer and
+  // kept inside the window. Layout effect: runs before paint, so no flicker.
+  useLayoutEffect(() => {
+    const el = tooltipRef.current
+    if (!tooltip || !el) return
+    const { width, height } = el.getBoundingClientRect()
+    const maxLeft = Math.max(TOOLTIP_EDGE_PX, window.innerWidth - width - TOOLTIP_EDGE_PX)
+    const above = tooltip.y - height - TOOLTIP_GAP_PX
+    setTooltipPos({
+      left: Math.min(Math.max(TOOLTIP_EDGE_PX, tooltip.x - width / 2), maxLeft),
+      // Flip below the pointer when there is no room above.
+      top: above >= TOOLTIP_EDGE_PX ? above : tooltip.y + TOOLTIP_GAP_PX + CELL_PX,
+    })
+  }, [tooltip])
 
   // Token units only apply to plugins that send token counts; everyone else
   // keeps their own unit whatever the setting says.
@@ -229,7 +256,7 @@ function UsageHeatmapInner({ days, format, brandColor }: UsageHeatmapProps) {
               className="rounded-[2.5px] bg-muted"
               style={cellStyle(cell.level)}
               data-tip={cellTitle(cell, format, showTokens)}
-              aria-label={cellTitle(cell, format, showTokens)}
+              aria-label={cellLabel(cell, format, showTokens)}
             />
           ))}
           {Array.from({ length: padCount }, (_, index) => (
@@ -250,11 +277,9 @@ function UsageHeatmapInner({ days, format, brandColor }: UsageHeatmapProps) {
       </div>
       {tooltip && (
         <div
-          className="pointer-events-none fixed z-50 rounded-md border border-border bg-popover px-2 py-1 text-xs text-popover-foreground shadow-md tabular-nums"
-          style={{
-            left: Math.min(tooltip.x + 10, window.innerWidth - 150),
-            top: tooltip.y - 32,
-          }}
+          ref={tooltipRef}
+          className="pointer-events-none fixed z-50 whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1 text-xs text-popover-foreground shadow-md tabular-nums"
+          style={{ left: tooltipPos.left, top: tooltipPos.top }}
         >
           {tooltip.text}
         </div>

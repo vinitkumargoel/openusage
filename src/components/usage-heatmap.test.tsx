@@ -143,10 +143,37 @@ describe("UsageHeatmap", () => {
 
     const cell = screen.getByLabelText(/\$4\.31/)
     fireEvent.mouseOver(cell, { clientX: 50, clientY: 80 })
-    expect(screen.getByText("$4.31 · Thu, Aug 27")).toBeInTheDocument()
+    // Tooltip carries the value only; the date stays in the aria-label.
+    expect(screen.getByText("$4.31")).toBeInTheDocument()
     fireEvent.mouseMove(cell, { clientX: 60, clientY: 90 })
     fireEvent.mouseLeave(cell.parentElement as HTMLElement)
-    expect(screen.queryByText("$4.31 · Thu, Aug 27")).toBeNull()
+    expect(screen.queryByText("$4.31")).toBeNull()
+  })
+
+  it("keeps the tooltip above the pointer and inside the window", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 7, 27, 12, 0, 0))
+
+    const todayKey = formatDayKey(new Date())
+    render(
+      <UsageHeatmap
+        days={[{ date: todayKey, value: 4.31, tokens: 3_400_000 }]}
+        format={{ kind: "dollars" }}
+        brandColor="#DE7356"
+      />
+    )
+
+    const cell = screen.getByLabelText(/\$4\.31/)
+    fireEvent.mouseOver(cell, { clientX: 500, clientY: 300 })
+    const tip = screen.getByText("$4.31 · 3.4M tokens")
+    // jsdom reports zero-size rects, so only the pointer-relative maths shows:
+    // centered on x, lifted clear of y by the gap.
+    expect(tip.style.left).toBe("500px")
+    expect(tip.style.top).toBe("290px")
+
+    // Near the left edge it is pushed back inside rather than off-screen.
+    fireEvent.mouseMove(cell, { clientX: 1, clientY: 300 })
+    expect(tip.style.left).toBe("6px")
   })
 
   it("shows both units in the tooltip when the plugin sends tokens", () => {
