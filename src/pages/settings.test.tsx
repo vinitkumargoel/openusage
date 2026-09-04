@@ -57,6 +57,8 @@ const defaultProps = {
   onResetTimerDisplayModeChange: vi.fn(),
   timeFormatMode: "auto" as const,
   onTimeFormatModeChange: vi.fn(),
+  heatmapUnit: "cost" as const,
+  onHeatmapUnitChange: vi.fn(),
   menubarIconStyle: "provider" as const,
   onMenubarIconStyleChange: vi.fn(),
   traySettingsPreview: {
@@ -221,6 +223,19 @@ describe("SettingsPage", () => {
     )
     await userEvent.click(screen.getByRole("radio", { name: "24-hour" }))
     expect(onTimeFormatModeChange).toHaveBeenCalledWith("24h")
+  })
+
+  it("renders activity units section", () => {
+    render(<SettingsPage {...defaultProps} />)
+    expect(screen.getByText("Activity Units")).toBeInTheDocument()
+    expect(screen.getByText("What the activity heatmap counts")).toBeInTheDocument()
+  })
+
+  it("updates heatmap unit to tokens", async () => {
+    const onHeatmapUnitChange = vi.fn()
+    render(<SettingsPage {...defaultProps} onHeatmapUnitChange={onHeatmapUnitChange} />)
+    await userEvent.click(screen.getByRole("radio", { name: "Tokens" }))
+    expect(onHeatmapUnitChange).toHaveBeenCalledWith("tokens")
   })
 
   it("renders menubar icon section", () => {

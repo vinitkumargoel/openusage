@@ -11,6 +11,7 @@ import {
   DEFAULT_AUTO_UPDATE_INTERVAL,
   DEFAULT_DISPLAY_MODE,
   DEFAULT_GLOBAL_SHORTCUT,
+  DEFAULT_HEATMAP_UNIT,
   DEFAULT_MENUBAR_ICON_STYLE,
   DEFAULT_RESET_TIMER_DISPLAY_MODE,
   DEFAULT_START_ON_LOGIN,
@@ -20,6 +21,7 @@ import {
   loadAutoUpdateInterval,
   loadDisplayMode,
   loadGlobalShortcut,
+  loadHeatmapUnit,
   loadMenubarIconStyle,
   migrateLegacyTraySettings,
   loadPluginSettings,
@@ -32,6 +34,7 @@ import {
   type AutoUpdateIntervalMinutes,
   type DisplayMode,
   type GlobalShortcut,
+  type HeatmapUnit,
   type MenubarIconStyle,
   type PluginSettings,
   type ResetTimerDisplayMode,
@@ -47,6 +50,7 @@ type UseSettingsBootstrapArgs = {
   setDisplayMode: (value: DisplayMode) => void
   setResetTimerDisplayMode: (value: ResetTimerDisplayMode) => void
   setTimeFormatMode: (value: TimeFormatMode) => void
+  setHeatmapUnit: (value: HeatmapUnit) => void
   setGlobalShortcut: (value: GlobalShortcut) => void
   setStartOnLogin: (value: boolean) => void
   setMenubarIconStyle: (value: MenubarIconStyle) => void
@@ -63,6 +67,7 @@ export function useSettingsBootstrap({
   setDisplayMode,
   setResetTimerDisplayMode,
   setTimeFormatMode,
+  setHeatmapUnit,
   setGlobalShortcut,
   setStartOnLogin,
   setMenubarIconStyle,
@@ -133,6 +138,13 @@ export function useSettingsBootstrap({
           console.error("Failed to load time format mode:", error)
         }
 
+        let storedHeatmapUnit = DEFAULT_HEATMAP_UNIT
+        try {
+          storedHeatmapUnit = await loadHeatmapUnit()
+        } catch (error) {
+          console.error("Failed to load heatmap unit:", error)
+        }
+
         let storedGlobalShortcut = DEFAULT_GLOBAL_SHORTCUT
         try {
           storedGlobalShortcut = await loadGlobalShortcut()
@@ -172,6 +184,7 @@ export function useSettingsBootstrap({
           setDisplayMode(storedDisplayMode)
           setResetTimerDisplayMode(storedResetTimerDisplayMode)
           setTimeFormatMode(storedTimeFormatMode)
+          setHeatmapUnit(storedHeatmapUnit)
           setGlobalShortcut(storedGlobalShortcut)
           setStartOnLogin(storedStartOnLogin)
           setMenubarIconStyle(storedMenubarIconStyle)
@@ -203,6 +216,7 @@ export function useSettingsBootstrap({
     setDisplayMode,
     setErrorForPlugins,
     setGlobalShortcut,
+    setHeatmapUnit,
     setLoadingForPlugins,
     setMenubarIconStyle,
     migrateLegacyTraySettings,

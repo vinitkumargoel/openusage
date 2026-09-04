@@ -53,6 +53,10 @@ pub enum MetricLine {
 pub struct HeatmapDay {
     pub date: String,
     pub value: f64,
+    /// Optional token count for the same day, shown alongside `value` and used
+    /// when the user picks token units. Absent for plugins without token data.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tokens: Option<f64>,
 }
 
 /// Cap on heatmap day entries per line — protects the IPC payload. ~400 days
@@ -609,9 +613,43 @@ fn parse_heatmap_days(days_array: &Array, line_idx: usize) -> Result<Vec<Heatmap
                 line_idx, day_idx, value
             ));
         }
-        days.push(HeatmapDay { date, value });
+        let tokens = parse_heatmap_tokens(&entry, line_idx, day_idx)?;
+        days.push(HeatmapDay {
+            date,
+            value,
+            tokens,
+        });
     }
     Ok(days)
+}
+
+/// Optional per-day token count. Missing/null is fine; a present-but-invalid
+/// value is an error so plugin bugs stay loud.
+fn parse_heatmap_tokens(
+    entry: &Object,
+    line_idx: usize,
+    day_idx: usize,
+) -> Result<Option<f64>, String> {
+    let raw: Value = match entry.get("tokens") {
+        Ok(v) => v,
+        Err(_) => return Ok(None),
+    };
+    if raw.is_null() || raw.is_undefined() {
+        return Ok(None);
+    }
+    let tokens = raw.as_number().ok_or_else(|| {
+        format!(
+            "heatmap line at index {}: day at index {} invalid tokens (expected number)",
+            line_idx, day_idx
+        )
+    })?;
+    if !tokens.is_finite() || tokens < 0.0 {
+        return Err(format!(
+            "heatmap line at index {}: day at index {} invalid tokens: {}",
+            line_idx, day_idx, tokens
+        ));
+    }
+    Ok(Some(tokens))
 }
 
 fn parse_heatmap_format(line: &Object, line_idx: usize) -> Result<Option<ProgressFormat>, String> {
@@ -961,6 +999,7 @@ mod tests {
             days: vec![HeatmapDay {
                 date: "2026-08-27".to_string(),
                 value: 4.31,
+                tokens: Some(3_400_000.0),
             }],
             format: Some(ProgressFormat::Dollars),
             color: None,
@@ -973,5 +1012,61 @@ mod tests {
             .expect("day object");
         assert_eq!(day.get("date").and_then(|v| v.as_str()), Some("2026-08-27"));
         assert!(day.get("value").is_some());
+        assert_eq!(
+            day.get("tokens").and_then(|v| v.as_f64()),
+            Some(3_400_000.0)
+        );
+    }
+
+    #[test]
+    fn heatmap_day_tokens_are_optional() {
+        let plugin = test_plugin(
+            r#"
+            globalThis.__openusage_plugin = {
+                probe() {
+                    return {
+                        lines: [{
+                            type: "heatmap",
+                            label: "Activity",
+                            days: [
+                                { date: "2026-08-26", value: 1.5, tokens: 120000 },
+                                { date: "2026-08-27", value: 2.5 }
+                            ],
+                            format: { kind: "dollars" }
+                        }]
+                    };
+                }
+            };
+            "#,
+        );
+        let output = run_probe(&plugin, &temp_app_dir("heatmap-tokens"), "0.0.0");
+        match &output.lines[0] {
+            MetricLine::Heatmap { days, .. } => {
+                assert_eq!(days[0].tokens, Some(120000.0));
+                assert_eq!(days[1].tokens, None);
+            }
+            other => panic!("expected heatmap line, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn heatmap_day_with_negative_tokens_becomes_error_line() {
+        let plugin = test_plugin(
+            r#"
+            globalThis.__openusage_plugin = {
+                probe() {
+                    return {
+                        lines: [{
+                            type: "heatmap",
+                            label: "Activity",
+                            days: [{ date: "2026-08-27", value: 1, tokens: -5 }]
+                        }]
+                    };
+                }
+            };
+            "#,
+        );
+        let output = run_probe(&plugin, &temp_app_dir("heatmap-bad-tokens"), "0.0.0");
+        assert!(error_text(output).contains("invalid tokens"));
     }
 }

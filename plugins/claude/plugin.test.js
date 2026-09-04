@@ -1795,7 +1795,7 @@ describe("claude plugin", () => {
       expect(last30.value).toContain("$0.50")
     })
 
-    it("emits an Activity heatmap line with per-day cost values", async () => {
+    it("emits an Activity heatmap line with per-day cost and token values", async () => {
       const todayKey = localDayKey(new Date())
       const oldKey = daysAgoKey(60)
       const ctx = makeProbeCtx({
@@ -1811,8 +1811,8 @@ describe("claude plugin", () => {
       expect(heatmap.label).toBe("Activity")
       expect(heatmap.format).toEqual({ kind: "dollars" })
       expect(heatmap.days).toEqual([
-        { date: todayKey, value: 0.5 },
-        { date: oldKey, value: 1.25 },
+        { date: todayKey, value: 0.5, tokens: 150 },
+        { date: oldKey, value: 1.25, tokens: 300 },
       ])
     })
 
@@ -1827,7 +1827,7 @@ describe("claude plugin", () => {
       const result = plugin.probe(ctx)
       const heatmap = result.lines.find((l) => l.type === "heatmap")
       expect(heatmap).toBeTruthy()
-      expect(heatmap.days).toEqual([{ date: todayKey, value: 0 }])
+      expect(heatmap.days).toEqual([{ date: todayKey, value: 0, tokens: 150 }])
     })
 
     it("omits the Activity heatmap when ccusage fails", async () => {

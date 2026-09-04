@@ -880,7 +880,12 @@
         const usageDayKey = dayKeyFromUsageDate(usage.daily[i].date)
         if (!usageDayKey) continue
         const dayCost = usageCostUsd(usage.daily[i])
-        heatmapDays.push({ date: usageDayKey, value: dayCost != null ? dayCost : 0 })
+        const dayTokens = Number(usage.daily[i].totalTokens)
+        heatmapDays.push({
+          date: usageDayKey,
+          value: dayCost != null ? dayCost : 0,
+          tokens: Number.isFinite(dayTokens) && dayTokens > 0 ? dayTokens : 0
+        })
       }
       if (heatmapDays.length > 0) {
         lines.push(ctx.line.heatmap({

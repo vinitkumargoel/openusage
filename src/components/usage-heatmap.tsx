@@ -2,6 +2,7 @@ import { memo, useMemo, useState } from "react"
 import { useDarkMode } from "@/hooks/use-dark-mode"
 import { adjustBrandColor } from "@/lib/color"
 import { formatCountNumber, formatDayKey } from "@/lib/utils"
+import { useAppPreferencesStore } from "@/stores/app-preferences-store"
 import type { HeatmapDay, ProgressFormat } from "@/lib/plugin-types"
 
 export const HEATMAP_WEEKS = 20
@@ -24,7 +25,10 @@ const FALLBACK_BASE_COLOR = "#6b7280"
 type Cell = {
   key: string
   date: Date
+  /** Value in the selected unit; drives the cell color. */
   value: number
+  /** Value in the other unit, shown in the tooltip. Absent when unavailable. */
+  altValue?: number
   level: number
 }
 
@@ -34,6 +38,24 @@ export function formatHeatmapValue(value: number, format?: ProgressFormat | null
   if (format?.kind === "percent") return `${formatCountNumber(value)}%`
   if (format?.kind === "count") return `${formatCountNumber(value)} ${format.suffix}`
   return formatCountNumber(value)
+}
+
+/** Compact token count, e.g. 3400000 -> "3.4M tokens". */
+export function formatTokenCount(value: number): string {
+  if (value <= 0) return "No usage"
+  const units = [
+    { threshold: 1e9, divisor: 1e9, suffix: "B" },
+    { threshold: 1e6, divisor: 1e6, suffix: "M" },
+    { threshold: 1e3, divisor: 1e3, suffix: "K" },
+  ]
+  for (const unit of units) {
+    if (value >= unit.threshold) {
+      const scaled = value / unit.divisor
+      const digits = scaled >= 10 ? 0 : 1
+      return `${scaled.toFixed(digits)}${unit.suffix} tokens`
+    }
+  }
+  return `${formatCountNumber(value)} tokens`
 }
 
 /** Quartile thresholds (p25/p50/p75) of the non-zero values, or null if all zero. */
@@ -52,12 +74,19 @@ export function intensityLevel(value: number, thresholds: [number, number, numbe
   return 4
 }
 
-function buildCells(days: HeatmapDay[], now: Date): Cell[] {
-  const valueByKey = new Map<string, number>()
+/** True when every day carries a token count, so token units are meaningful. */
+export function hasTokenCounts(days: HeatmapDay[]): boolean {
+  return days.length > 0 && days.every((day) => typeof day.tokens === "number")
+}
+
+function buildCells(days: HeatmapDay[], now: Date, showTokens: boolean): Cell[] {
+  const dayByKey = new Map<string, HeatmapDay>()
   for (const day of days) {
-    valueByKey.set(day.date, day.value)
+    dayByKey.set(day.date, day)
   }
-  const thresholds = quartileThresholds([...valueByKey.values()])
+  const pick = (day: HeatmapDay) => (showTokens ? (day.tokens ?? 0) : day.value)
+  const pickAlt = (day: HeatmapDay) => (showTokens ? day.value : day.tokens)
+  const thresholds = quartileThresholds([...dayByKey.values()].map(pick))
 
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const start = new Date(today)
@@ -67,8 +96,15 @@ function buildCells(days: HeatmapDay[], now: Date): Cell[] {
   const cursor = new Date(start)
   while (cursor <= today) {
     const key = formatDayKey(cursor)
-    const value = valueByKey.get(key) ?? 0
-    cells.push({ key, date: new Date(cursor), value, level: intensityLevel(value, thresholds) })
+    const day = dayByKey.get(key)
+    const value = day ? pick(day) : 0
+    cells.push({
+      key,
+      date: new Date(cursor),
+      value,
+      altValue: day ? pickAlt(day) : undefined,
+      level: intensityLevel(value, thresholds),
+    })
     cursor.setDate(cursor.getDate() + 1)
   }
   return cells
@@ -93,9 +129,22 @@ function buildMonthLabels(cells: Cell[]): MonthLabel[] {
   return labels
 }
 
-function cellTitle(cell: Cell, format?: ProgressFormat | null): string {
+/**
+ * "$4.21 · 3.4M tokens · Wed, Sep 3" — selected unit first, other unit second
+ * when the plugin provides both.
+ */
+function cellTitle(cell: Cell, format: ProgressFormat | null | undefined, showTokens: boolean): string {
   const d = cell.date
-  return `${formatHeatmapValue(cell.value, format)} · ${DOW_LABELS[d.getDay()]}, ${MONTH_LABELS[d.getMonth()]} ${d.getDate()}`
+  const day = `${DOW_LABELS[d.getDay()]}, ${MONTH_LABELS[d.getMonth()]} ${d.getDate()}`
+  const primary = showTokens
+    ? formatTokenCount(cell.value)
+    : formatHeatmapValue(cell.value, format)
+  if (cell.value <= 0) return `${primary} · ${day}`
+
+  const alt = cell.altValue
+  if (alt === undefined || alt <= 0) return `${primary} · ${day}`
+  const secondary = showTokens ? formatHeatmapValue(alt, format) : formatTokenCount(alt)
+  return `${primary} · ${secondary} · ${day}`
 }
 
 interface UsageHeatmapProps {
@@ -106,9 +155,13 @@ interface UsageHeatmapProps {
 
 function UsageHeatmapInner({ days, format, brandColor }: UsageHeatmapProps) {
   const isDark = useDarkMode()
+  const heatmapUnit = useAppPreferencesStore((state) => state.heatmapUnit)
   const [tooltip, setTooltip] = useState<{ x: number; y: number; text: string } | null>(null)
 
-  const cells = useMemo(() => buildCells(days, new Date()), [days])
+  // Token units only apply to plugins that send token counts; everyone else
+  // keeps their own unit whatever the setting says.
+  const showTokens = heatmapUnit === "tokens" && hasTokenCounts(days)
+  const cells = useMemo(() => buildCells(days, new Date(), showTokens), [days, showTokens])
   const monthLabels = useMemo(() => buildMonthLabels(cells), [cells])
 
   const baseColor = adjustBrandColor(brandColor, isDark, FALLBACK_BASE_COLOR)
@@ -175,8 +228,8 @@ function UsageHeatmapInner({ days, format, brandColor }: UsageHeatmapProps) {
               key={cell.key}
               className="rounded-[2.5px] bg-muted"
               style={cellStyle(cell.level)}
-              data-tip={cellTitle(cell, format)}
-              aria-label={cellTitle(cell, format)}
+              data-tip={cellTitle(cell, format, showTokens)}
+              aria-label={cellTitle(cell, format, showTokens)}
             />
           ))}
           {Array.from({ length: padCount }, (_, index) => (

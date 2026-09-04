@@ -3,6 +3,7 @@ import {
   DEFAULT_AUTO_UPDATE_INTERVAL,
   DEFAULT_DISPLAY_MODE,
   DEFAULT_GLOBAL_SHORTCUT,
+  DEFAULT_HEATMAP_UNIT,
   DEFAULT_MENUBAR_ICON_STYLE,
   DEFAULT_RESET_TIMER_DISPLAY_MODE,
   DEFAULT_START_ON_LOGIN,
@@ -11,6 +12,7 @@ import {
   type AutoUpdateIntervalMinutes,
   type DisplayMode,
   type GlobalShortcut,
+  type HeatmapUnit,
   type MenubarIconStyle,
   type ResetTimerDisplayMode,
   type ThemeMode,
@@ -23,6 +25,7 @@ type AppPreferencesStore = {
   displayMode: DisplayMode
   resetTimerDisplayMode: ResetTimerDisplayMode
   timeFormatMode: TimeFormatMode
+  heatmapUnit: HeatmapUnit
   globalShortcut: GlobalShortcut
   startOnLogin: boolean
   menubarIconStyle: MenubarIconStyle
@@ -31,6 +34,7 @@ type AppPreferencesStore = {
   setDisplayMode: (value: DisplayMode) => void
   setResetTimerDisplayMode: (value: ResetTimerDisplayMode) => void
   setTimeFormatMode: (value: TimeFormatMode) => void
+  setHeatmapUnit: (value: HeatmapUnit) => void
   setGlobalShortcut: (value: GlobalShortcut) => void
   setStartOnLogin: (value: boolean) => void
   setMenubarIconStyle: (value: MenubarIconStyle) => void
@@ -43,6 +47,7 @@ const initialState = {
   displayMode: DEFAULT_DISPLAY_MODE,
   resetTimerDisplayMode: DEFAULT_RESET_TIMER_DISPLAY_MODE,
   timeFormatMode: DEFAULT_TIME_FORMAT_MODE,
+  heatmapUnit: DEFAULT_HEATMAP_UNIT,
   globalShortcut: DEFAULT_GLOBAL_SHORTCUT,
   startOnLogin: DEFAULT_START_ON_LOGIN,
   menubarIconStyle: DEFAULT_MENUBAR_ICON_STYLE,
@@ -55,6 +60,7 @@ export const useAppPreferencesStore = create<AppPreferencesStore>((set) => ({
   setDisplayMode: (value) => set({ displayMode: value }),
   setResetTimerDisplayMode: (value) => set({ resetTimerDisplayMode: value }),
   setTimeFormatMode: (value) => set({ timeFormatMode: value }),
+  setHeatmapUnit: (value) => set({ heatmapUnit: value }),
   setGlobalShortcut: (value) => set({ globalShortcut: value }),
   setStartOnLogin: (value) => set({ startOnLogin: value }),
   setMenubarIconStyle: (value) => set({ menubarIconStyle: value }),

@@ -1,11 +1,13 @@
 import { useCallback } from "react"
 import {
   saveDisplayMode,
+  saveHeatmapUnit,
   saveMenubarIconStyle,
   saveResetTimerDisplayMode,
   saveThemeMode,
   saveTimeFormatMode,
   type DisplayMode,
+  type HeatmapUnit,
   type MenubarIconStyle,
   type ResetTimerDisplayMode,
   type ThemeMode,
@@ -20,6 +22,7 @@ type UseSettingsDisplayActionsArgs = {
   resetTimerDisplayMode: ResetTimerDisplayMode
   setResetTimerDisplayMode: (value: ResetTimerDisplayMode) => void
   setTimeFormatMode: (value: TimeFormatMode) => void
+  setHeatmapUnit: (value: HeatmapUnit) => void
   setMenubarIconStyle: (value: MenubarIconStyle) => void
   scheduleTrayIconUpdate: ScheduleTrayIconUpdate
 }
@@ -30,6 +33,7 @@ export function useSettingsDisplayActions({
   resetTimerDisplayMode,
   setResetTimerDisplayMode,
   setTimeFormatMode,
+  setHeatmapUnit,
   setMenubarIconStyle,
   scheduleTrayIconUpdate,
 }: UseSettingsDisplayActionsArgs) {
@@ -67,6 +71,13 @@ export function useSettingsDisplayActions({
     })
   }, [setTimeFormatMode])
 
+  const handleHeatmapUnitChange = useCallback((unit: HeatmapUnit) => {
+    setHeatmapUnit(unit)
+    void saveHeatmapUnit(unit).catch((error) => {
+      console.error("Failed to save heatmap unit:", error)
+    })
+  }, [setHeatmapUnit])
+
   const handleMenubarIconStyleChange = useCallback((style: MenubarIconStyle) => {
     setMenubarIconStyle(style)
     scheduleTrayIconUpdate("settings", 0)
@@ -81,6 +92,7 @@ export function useSettingsDisplayActions({
     handleResetTimerDisplayModeChange,
     handleResetTimerDisplayModeToggle,
     handleTimeFormatModeChange,
+    handleHeatmapUnitChange,
     handleMenubarIconStyleChange,
   }
 }

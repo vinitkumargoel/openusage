@@ -12,6 +12,7 @@ const {
   loadAutoUpdateIntervalMock,
   loadDisplayModeMock,
   loadGlobalShortcutMock,
+  loadHeatmapUnitMock,
   loadMenubarIconStyleMock,
   loadPluginSettingsMock,
   loadResetTimerDisplayModeMock,
@@ -32,6 +33,7 @@ const {
   loadAutoUpdateIntervalMock: vi.fn(),
   loadDisplayModeMock: vi.fn(),
   loadGlobalShortcutMock: vi.fn(),
+  loadHeatmapUnitMock: vi.fn(),
   loadMenubarIconStyleMock: vi.fn(),
   loadPluginSettingsMock: vi.fn(),
   loadResetTimerDisplayModeMock: vi.fn(),
@@ -59,6 +61,7 @@ vi.mock("@/lib/settings", () => ({
   DEFAULT_AUTO_UPDATE_INTERVAL: 15,
   DEFAULT_DISPLAY_MODE: "left",
   DEFAULT_GLOBAL_SHORTCUT: null,
+  DEFAULT_HEATMAP_UNIT: "cost",
   DEFAULT_MENUBAR_ICON_STYLE: "provider",
   DEFAULT_RESET_TIMER_DISPLAY_MODE: "relative",
   DEFAULT_START_ON_LOGIN: false,
@@ -68,6 +71,7 @@ vi.mock("@/lib/settings", () => ({
   loadAutoUpdateInterval: loadAutoUpdateIntervalMock,
   loadDisplayMode: loadDisplayModeMock,
   loadGlobalShortcut: loadGlobalShortcutMock,
+  loadHeatmapUnit: loadHeatmapUnitMock,
   loadMenubarIconStyle: loadMenubarIconStyleMock,
   loadPluginSettings: loadPluginSettingsMock,
   loadResetTimerDisplayMode: loadResetTimerDisplayModeMock,
@@ -90,6 +94,7 @@ function createArgs() {
     setDisplayMode: vi.fn(),
     setResetTimerDisplayMode: vi.fn(),
     setTimeFormatMode: vi.fn(),
+    setHeatmapUnit: vi.fn(),
     setGlobalShortcut: vi.fn(),
     setStartOnLogin: vi.fn(),
     setMenubarIconStyle: vi.fn(),
@@ -111,6 +116,7 @@ describe("useSettingsBootstrap", () => {
     loadAutoUpdateIntervalMock.mockReset()
     loadDisplayModeMock.mockReset()
     loadGlobalShortcutMock.mockReset()
+    loadHeatmapUnitMock.mockReset()
     loadMenubarIconStyleMock.mockReset()
     loadPluginSettingsMock.mockReset()
     loadResetTimerDisplayModeMock.mockReset()
@@ -141,6 +147,7 @@ describe("useSettingsBootstrap", () => {
     loadDisplayModeMock.mockResolvedValue("used")
     loadResetTimerDisplayModeMock.mockResolvedValue("relative")
     loadTimeFormatModeMock.mockResolvedValue("auto")
+    loadHeatmapUnitMock.mockResolvedValue("cost")
     loadGlobalShortcutMock.mockResolvedValue("CommandOrControl+Shift+O")
     loadMenubarIconStyleMock.mockResolvedValue("provider")
     loadStartOnLoginMock.mockResolvedValue(true)

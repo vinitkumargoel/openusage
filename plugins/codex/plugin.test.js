@@ -409,7 +409,7 @@ describe("codex plugin", () => {
     }
   })
 
-  it("emits an Activity heatmap line with per-day cost values", async () => {
+  it("emits an Activity heatmap line with per-day cost and token values", async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date("2026-02-20T16:00:00.000Z"))
 
@@ -441,8 +441,8 @@ describe("codex plugin", () => {
       expect(heatmap.label).toBe("Activity")
       expect(heatmap.format).toEqual({ kind: "dollars" })
       expect(heatmap.days).toEqual([
-        { date: "2026-02-20", value: 0.75 },
-        { date: "2026-02-01", value: 1.0 },
+        { date: "2026-02-20", value: 0.75, tokens: 150 },
+        { date: "2026-02-01", value: 1.0, tokens: 300 },
       ])
     } finally {
       vi.useRealTimers()

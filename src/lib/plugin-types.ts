@@ -3,7 +3,8 @@ export type ProgressFormat =
   | { kind: "dollars" }
   | { kind: "count"; suffix: string }
 
-export type HeatmapDay = { date: string; value: number }
+/** `tokens` is optional; only plugins with token-level data (Claude, Codex) send it. */
+export type HeatmapDay = { date: string; value: number; tokens?: number }
 
 export type MetricLine =
   | { type: "text"; label: string; value: string; color?: string; subtitle?: string }

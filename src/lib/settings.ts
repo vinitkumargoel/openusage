@@ -20,6 +20,9 @@ export type ResetTimerDisplayMode = "relative" | "absolute";
 
 export type TimeFormatMode = "auto" | "12h" | "24h";
 
+/** Unit shown in activity heatmaps that carry both cost and token counts. */
+export type HeatmapUnit = "cost" | "tokens";
+
 export type MenubarIconStyle = "provider" | "bars" | "donut";
 
 export type GlobalShortcut = string | null;
@@ -31,6 +34,7 @@ const THEME_MODE_KEY = "themeMode";
 const DISPLAY_MODE_KEY = "displayMode";
 const RESET_TIMER_DISPLAY_MODE_KEY = "resetTimerDisplayMode";
 const TIME_FORMAT_MODE_KEY = "timeFormatMode";
+const HEATMAP_UNIT_KEY = "heatmapUnit";
 const MENUBAR_ICON_STYLE_KEY = "menubarIconStyle";
 const LEGACY_TRAY_ICON_STYLE_KEY = "trayIconStyle";
 const LEGACY_TRAY_SHOW_PERCENTAGE_KEY = "trayShowPercentage";
@@ -42,6 +46,7 @@ export const DEFAULT_THEME_MODE: ThemeMode = "system";
 export const DEFAULT_DISPLAY_MODE: DisplayMode = "left";
 export const DEFAULT_RESET_TIMER_DISPLAY_MODE: ResetTimerDisplayMode = "relative";
 export const DEFAULT_TIME_FORMAT_MODE: TimeFormatMode = "auto";
+export const DEFAULT_HEATMAP_UNIT: HeatmapUnit = "cost";
 export const DEFAULT_MENUBAR_ICON_STYLE: MenubarIconStyle = "provider";
 export const DEFAULT_GLOBAL_SHORTCUT: GlobalShortcut = null;
 export const DEFAULT_START_ON_LOGIN = false;
@@ -51,6 +56,7 @@ const THEME_MODES: ThemeMode[] = ["system", "light", "dark"];
 const DISPLAY_MODES: DisplayMode[] = ["used", "left"];
 const RESET_TIMER_DISPLAY_MODES: ResetTimerDisplayMode[] = ["relative", "absolute"];
 const TIME_FORMAT_MODES: TimeFormatMode[] = ["auto", "12h", "24h"];
+const HEATMAP_UNITS: HeatmapUnit[] = ["cost", "tokens"];
 const MENUBAR_ICON_STYLES: MenubarIconStyle[] = ["provider", "donut", "bars"];
 
 export const MENUBAR_ICON_STYLE_OPTIONS: { value: MenubarIconStyle; label: string }[] = [
@@ -85,6 +91,11 @@ export const TIME_FORMAT_OPTIONS: { value: TimeFormatMode; label: string }[] = [
   { value: "auto", label: "Auto" },
   { value: "12h", label: "12-hour" },
   { value: "24h", label: "24-hour" },
+];
+
+export const HEATMAP_UNIT_OPTIONS: { value: HeatmapUnit; label: string }[] = [
+  { value: "cost", label: "Cost" },
+  { value: "tokens", label: "Tokens" },
 ];
 
 const store = new LazyStore(SETTINGS_STORE_PATH);
@@ -240,6 +251,21 @@ export async function loadTimeFormatMode(): Promise<TimeFormatMode> {
 
 export async function saveTimeFormatMode(mode: TimeFormatMode): Promise<void> {
   await store.set(TIME_FORMAT_MODE_KEY, mode);
+  await store.save();
+}
+
+function isHeatmapUnit(value: unknown): value is HeatmapUnit {
+  return typeof value === "string" && HEATMAP_UNITS.includes(value as HeatmapUnit);
+}
+
+export async function loadHeatmapUnit(): Promise<HeatmapUnit> {
+  const stored = await store.get<unknown>(HEATMAP_UNIT_KEY);
+  if (isHeatmapUnit(stored)) return stored;
+  return DEFAULT_HEATMAP_UNIT;
+}
+
+export async function saveHeatmapUnit(unit: HeatmapUnit): Promise<void> {
+  await store.set(HEATMAP_UNIT_KEY, unit);
   await store.save();
 }
 

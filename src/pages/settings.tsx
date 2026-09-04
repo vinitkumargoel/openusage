@@ -23,6 +23,7 @@ import { getBarFillLayout, getTrayIconSizePx } from "@/lib/tray-bars-icon";
 import {
   AUTO_UPDATE_OPTIONS,
   DISPLAY_MODE_OPTIONS,
+  HEATMAP_UNIT_OPTIONS,
   MENUBAR_ICON_STYLE_OPTIONS,
   RESET_TIMER_DISPLAY_OPTIONS,
   THEME_OPTIONS,
@@ -30,6 +31,7 @@ import {
   type AutoUpdateIntervalMinutes,
   type DisplayMode,
   type GlobalShortcut,
+  type HeatmapUnit,
   type MenubarIconStyle,
   type ResetTimerDisplayMode,
   type ThemeMode,
@@ -273,6 +275,8 @@ interface SettingsPageProps {
   onResetTimerDisplayModeChange: (value: ResetTimerDisplayMode) => void;
   timeFormatMode: TimeFormatMode;
   onTimeFormatModeChange: (value: TimeFormatMode) => void;
+  heatmapUnit: HeatmapUnit;
+  onHeatmapUnitChange: (value: HeatmapUnit) => void;
   menubarIconStyle: MenubarIconStyle;
   onMenubarIconStyleChange: (value: MenubarIconStyle) => void;
   traySettingsPreview: TraySettingsPreview;
@@ -296,6 +300,8 @@ export function SettingsPage({
   onResetTimerDisplayModeChange,
   timeFormatMode,
   onTimeFormatModeChange,
+  heatmapUnit,
+  onHeatmapUnitChange,
   menubarIconStyle,
   onMenubarIconStyleChange,
   traySettingsPreview,
@@ -437,6 +443,43 @@ export function SettingsPage({
                   size="sm"
                   className="flex-1 flex flex-col items-center gap-0 py-2 h-auto"
                   onClick={() => onTimeFormatModeChange(option.value)}
+                >
+                  <span>{option.label}</span>
+                  <span
+                    className={cn(
+                      "text-xs font-normal",
+                      isActive ? "text-primary-foreground/80" : "text-muted-foreground"
+                    )}
+                  >
+                    {example}
+                  </span>
+                </Button>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+      <section>
+        <h3 className="text-lg font-semibold mb-0">Activity Units</h3>
+        <p className="text-sm text-muted-foreground mb-2">
+          What the activity heatmap counts
+        </p>
+        <div className="bg-muted/50 rounded-lg p-1">
+          <div className="flex gap-1" role="radiogroup" aria-label="Activity heatmap unit">
+            {HEATMAP_UNIT_OPTIONS.map((option) => {
+              const isActive = option.value === heatmapUnit;
+              const example = option.value === "cost" ? "$4.21" : "3.4M";
+              return (
+                <Button
+                  key={option.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={isActive}
+                  aria-label={option.label}
+                  variant={isActive ? "default" : "outline"}
+                  size="sm"
+                  className="flex-1 flex flex-col items-center gap-0 py-2 h-auto"
+                  onClick={() => onHeatmapUnitChange(option.value)}
                 >
                   <span>{option.label}</span>
                   <span

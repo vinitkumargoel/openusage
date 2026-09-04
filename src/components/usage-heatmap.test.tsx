@@ -3,10 +3,13 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import {
   UsageHeatmap,
   formatHeatmapValue,
+  formatTokenCount,
+  hasTokenCounts,
   intensityLevel,
   quartileThresholds,
 } from "@/components/usage-heatmap"
 import { formatDayKey } from "@/lib/utils"
+import { useAppPreferencesStore } from "@/stores/app-preferences-store"
 
 describe("quartileThresholds", () => {
   it("returns null when all values are zero", () => {
@@ -50,9 +53,38 @@ describe("formatHeatmapValue", () => {
   })
 })
 
+describe("formatTokenCount", () => {
+  it("shows No usage for zero", () => {
+    expect(formatTokenCount(0)).toBe("No usage")
+  })
+
+  it("scales to K/M/B", () => {
+    expect(formatTokenCount(150)).toBe("150 tokens")
+    expect(formatTokenCount(3_400)).toBe("3.4K tokens")
+    expect(formatTokenCount(3_400_000)).toBe("3.4M tokens")
+    expect(formatTokenCount(42_000_000)).toBe("42M tokens")
+    expect(formatTokenCount(2_100_000_000)).toBe("2.1B tokens")
+  })
+})
+
+describe("hasTokenCounts", () => {
+  it("is true only when every day carries a token count", () => {
+    expect(hasTokenCounts([])).toBe(false)
+    expect(hasTokenCounts([{ date: "2026-08-27", value: 1 }])).toBe(false)
+    expect(hasTokenCounts([{ date: "2026-08-27", value: 1, tokens: 0 }])).toBe(true)
+    expect(
+      hasTokenCounts([
+        { date: "2026-08-26", value: 1, tokens: 10 },
+        { date: "2026-08-27", value: 1 },
+      ])
+    ).toBe(false)
+  })
+})
+
 describe("UsageHeatmap", () => {
   afterEach(() => {
     vi.useRealTimers()
+    useAppPreferencesStore.getState().setHeatmapUnit("cost")
   })
 
   it("renders cells with value tooltips and a legend", () => {
@@ -115,6 +147,57 @@ describe("UsageHeatmap", () => {
     fireEvent.mouseMove(cell, { clientX: 60, clientY: 90 })
     fireEvent.mouseLeave(cell.parentElement as HTMLElement)
     expect(screen.queryByText("$4.31 · Thu, Aug 27")).toBeNull()
+  })
+
+  it("shows both units in the tooltip when the plugin sends tokens", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 7, 27, 12, 0, 0))
+
+    const todayKey = formatDayKey(new Date())
+    render(
+      <UsageHeatmap
+        days={[{ date: todayKey, value: 4.31, tokens: 3_400_000 }]}
+        format={{ kind: "dollars" }}
+        brandColor="#DE7356"
+      />
+    )
+
+    expect(screen.getByLabelText("$4.31 · 3.4M tokens · Thu, Aug 27")).toBeInTheDocument()
+  })
+
+  it("leads with tokens when the tokens unit is selected", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 7, 27, 12, 0, 0))
+    useAppPreferencesStore.getState().setHeatmapUnit("tokens")
+
+    const todayKey = formatDayKey(new Date())
+    render(
+      <UsageHeatmap
+        days={[{ date: todayKey, value: 4.31, tokens: 3_400_000 }]}
+        format={{ kind: "dollars" }}
+        brandColor="#DE7356"
+      />
+    )
+
+    const cell = screen.getByLabelText("3.4M tokens · $4.31 · Thu, Aug 27")
+    expect(cell.style.background).toContain("#DE7356")
+  })
+
+  it("keeps the plugin's own unit when it sends no token counts", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 7, 27, 12, 0, 0))
+    useAppPreferencesStore.getState().setHeatmapUnit("tokens")
+
+    const todayKey = formatDayKey(new Date())
+    render(
+      <UsageHeatmap
+        days={[{ date: todayKey, value: 4.31 }]}
+        format={{ kind: "dollars" }}
+        brandColor="#DE7356"
+      />
+    )
+
+    expect(screen.getByLabelText("$4.31 · Thu, Aug 27")).toBeInTheDocument()
   })
 
   it("renders all cells empty when there is no usage", () => {

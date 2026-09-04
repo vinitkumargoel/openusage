@@ -47,6 +47,8 @@
       days.push({
         date: d.getFullYear() + "-" + (month < 10 ? "0" : "") + month + "-" + (day < 10 ? "0" : "") + day,
         value: value,
+        // Roughly cost-proportional, so the Cost/Tokens toggle is exercised.
+        tokens: value > 0 ? value * 250000 + (age % 5) * 1000 : 0,
       })
     }
     return days

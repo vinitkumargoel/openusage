@@ -11,6 +11,7 @@ import type {
   AutoUpdateIntervalMinutes,
   DisplayMode,
   GlobalShortcut,
+  HeatmapUnit,
   MenubarIconStyle,
   ResetTimerDisplayMode,
   ThemeMode,
@@ -33,6 +34,7 @@ export type AppContentActionProps = {
   onResetTimerDisplayModeChange: (mode: ResetTimerDisplayMode) => void
   onResetTimerDisplayModeToggle: () => void
   onTimeFormatModeChange: (mode: TimeFormatMode) => void
+  onHeatmapUnitChange: (unit: HeatmapUnit) => void
   onMenubarIconStyleChange: (value: MenubarIconStyle) => void
   traySettingsPreview: TraySettingsPreview
   onGlobalShortcutChange: (value: GlobalShortcut) => void
@@ -54,6 +56,7 @@ export function AppContent({
   onResetTimerDisplayModeChange,
   onResetTimerDisplayModeToggle,
   onTimeFormatModeChange,
+  onHeatmapUnitChange,
   onMenubarIconStyleChange,
   traySettingsPreview,
   onGlobalShortcutChange,
@@ -69,6 +72,7 @@ export function AppContent({
     displayMode,
     resetTimerDisplayMode,
     timeFormatMode,
+    heatmapUnit,
     menubarIconStyle,
     autoUpdateInterval,
     globalShortcut,
@@ -79,6 +83,7 @@ export function AppContent({
       displayMode: state.displayMode,
       resetTimerDisplayMode: state.resetTimerDisplayMode,
       timeFormatMode: state.timeFormatMode,
+      heatmapUnit: state.heatmapUnit,
       menubarIconStyle: state.menubarIconStyle,
       autoUpdateInterval: state.autoUpdateInterval,
       globalShortcut: state.globalShortcut,
@@ -116,6 +121,8 @@ export function AppContent({
         onResetTimerDisplayModeChange={onResetTimerDisplayModeChange}
         timeFormatMode={timeFormatMode}
         onTimeFormatModeChange={onTimeFormatModeChange}
+        heatmapUnit={heatmapUnit}
+        onHeatmapUnitChange={onHeatmapUnitChange}
         menubarIconStyle={menubarIconStyle}
         onMenubarIconStyleChange={onMenubarIconStyleChange}
         traySettingsPreview={traySettingsPreview}

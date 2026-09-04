@@ -3,6 +3,7 @@ import {
   DEFAULT_AUTO_UPDATE_INTERVAL,
   DEFAULT_DISPLAY_MODE,
   DEFAULT_GLOBAL_SHORTCUT,
+  DEFAULT_HEATMAP_UNIT,
   DEFAULT_MENUBAR_ICON_STYLE,
   DEFAULT_PLUGIN_SETTINGS,
   DEFAULT_RESET_TIMER_DISPLAY_MODE,
@@ -14,6 +15,7 @@ import {
   loadAutoUpdateInterval,
   loadDisplayMode,
   loadGlobalShortcut,
+  loadHeatmapUnit,
   loadMenubarIconStyle,
   loadPluginSettings,
   loadResetTimerDisplayMode,
@@ -25,6 +27,7 @@ import {
   saveAutoUpdateInterval,
   saveDisplayMode,
   saveGlobalShortcut,
+  saveHeatmapUnit,
   saveMenubarIconStyle,
   savePluginSettings,
   saveResetTimerDisplayMode,
@@ -205,6 +208,20 @@ describe("settings", () => {
   it("falls back to default for invalid time format mode", async () => {
     storeState.set("timeFormatMode", "invalid")
     await expect(loadTimeFormatMode()).resolves.toBe(DEFAULT_TIME_FORMAT_MODE)
+  })
+
+  it("loads default heatmap unit when missing", async () => {
+    await expect(loadHeatmapUnit()).resolves.toBe(DEFAULT_HEATMAP_UNIT)
+  })
+
+  it("saves and loads heatmap unit", async () => {
+    await saveHeatmapUnit("tokens")
+    await expect(loadHeatmapUnit()).resolves.toBe("tokens")
+  })
+
+  it("falls back to default for invalid heatmap unit", async () => {
+    storeState.set("heatmapUnit", "bananas")
+    await expect(loadHeatmapUnit()).resolves.toBe(DEFAULT_HEATMAP_UNIT)
   })
 
   it("migrates and removes legacy tray settings keys", async () => {

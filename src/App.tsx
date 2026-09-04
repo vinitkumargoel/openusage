@@ -56,6 +56,7 @@ function App() {
     resetTimerDisplayMode,
     setResetTimerDisplayMode,
     setTimeFormatMode,
+    setHeatmapUnit,
     setGlobalShortcut,
     setStartOnLogin,
   } = useAppPreferencesStore(
@@ -71,6 +72,7 @@ function App() {
       resetTimerDisplayMode: state.resetTimerDisplayMode,
       setResetTimerDisplayMode: state.setResetTimerDisplayMode,
       setTimeFormatMode: state.setTimeFormatMode,
+      setHeatmapUnit: state.setHeatmapUnit,
       setGlobalShortcut: state.setGlobalShortcut,
       setStartOnLogin: state.setStartOnLogin,
     }))
@@ -120,6 +122,7 @@ function App() {
     setMenubarIconStyle,
     setResetTimerDisplayMode,
     setTimeFormatMode,
+    setHeatmapUnit,
     setGlobalShortcut,
     setStartOnLogin,
     setLoadingForPlugins,
@@ -135,6 +138,7 @@ function App() {
     handleResetTimerDisplayModeChange,
     handleResetTimerDisplayModeToggle,
     handleTimeFormatModeChange,
+    handleHeatmapUnitChange,
     handleMenubarIconStyleChange,
   } = useSettingsDisplayActions({
     setThemeMode,
@@ -142,6 +146,7 @@ function App() {
     resetTimerDisplayMode,
     setResetTimerDisplayMode,
     setTimeFormatMode,
+    setHeatmapUnit,
     setMenubarIconStyle,
     scheduleTrayIconUpdate,
   })
@@ -250,6 +255,7 @@ function App() {
         onResetTimerDisplayModeChange: handleResetTimerDisplayModeChange,
         onResetTimerDisplayModeToggle: handleResetTimerDisplayModeToggle,
         onTimeFormatModeChange: handleTimeFormatModeChange,
+        onHeatmapUnitChange: handleHeatmapUnitChange,
         onMenubarIconStyleChange: handleMenubarIconStyleChange,
         traySettingsPreview,
         onGlobalShortcutChange: handleGlobalShortcutChange,
