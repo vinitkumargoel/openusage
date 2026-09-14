@@ -130,6 +130,7 @@ export function AppContent({
         onGlobalShortcutChange={onGlobalShortcutChange}
         startOnLogin={startOnLogin}
         onStartOnLoginChange={onStartOnLoginChange}
+        onPluginConfigSaved={onRetryPlugin}
       />
     )
   }

@@ -119,6 +119,13 @@ export const makeCtx = () => {
       if (opts.color) line.color = opts.color
       return line
     },
+    histogram: (opts) => {
+      const line = { type: "histogram", label: opts.label, rows: opts.rows }
+      if (opts.columns) line.columns = opts.columns
+      if (opts.axis) line.axis = opts.axis
+      if (opts.color) line.color = opts.color
+      return line
+    },
   }
 
   ctx.fmt = {

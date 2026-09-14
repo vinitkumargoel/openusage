@@ -54,15 +54,33 @@ function makePool() {
   return accounts
 }
 
-function makeQuotaBody({ gemWeek = 0.6, gemFive = 0.9, rest = 1, weeklyReset = RESET_A }) {
+/** Twenty 10-minute buckets in relay wall clock, last one current. */
+function makeBuckets(counts = {}) {
+  const out = []
+  for (let i = 0; i < 20; i += 1) {
+    const start = 17 * 60 + 20 + i * 10
+    const end = start + 10
+    const hhmm = (m) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`
+    out.push({ time: `${hhmm(start)}-${hhmm(end)}`, success: counts[i] ?? 0, failed: 0 })
+  }
+  return out
+}
+
+// `gemFive: null` drops the 5h bucket, which is what a free-tier account returns.
+function makeQuotaBody({ gemWeek = 0.6, gemFive = 0.9, rest = 1, weeklyReset = RESET_A, fiveReset = RESET_5H }) {
+  const gemini = [
+    { bucketId: "gemini-weekly", window: "weekly", resetTime: weeklyReset, remainingFraction: gemWeek },
+  ]
+  if (gemFive !== null) {
+    const bucket = { bucketId: "gemini-5h", window: "5h", remainingFraction: gemFive }
+    if (fiveReset) bucket.resetTime = fiveReset
+    gemini.push(bucket)
+  }
   return {
     groups: [
       {
         displayName: "Gemini Models",
-        buckets: [
-          { bucketId: "gemini-weekly", window: "weekly", resetTime: weeklyReset, remainingFraction: gemWeek },
-          { bucketId: "gemini-5h", window: "5h", resetTime: RESET_5H, remainingFraction: gemFive },
-        ],
+        buckets: gemini,
       },
       {
         displayName: "Claude and GPT models",
@@ -127,13 +145,56 @@ describe("antigravity-pool plugin", () => {
   })
 
   describe("config", () => {
-    it("names the directory to create config.json in", () => {
-      expect(() => plugin.probe(ctx)).toThrow(/\/tmp\/openusage-test\/plugin/)
+    it("points at Settings when there is no config yet", () => {
+      expect(() => plugin.probe(ctx)).toThrow(/Settings → Plugin Settings/)
+    })
+
+    it("rejects a relay url without a scheme", () => {
+      writeConfig(ctx, { baseUrl: "100.105.72.106:8317", managementKey: "secret-key" })
+      expect(() => plugin.probe(ctx)).toThrow(/must start with http/)
     })
 
     it("rejects a config missing the management key", () => {
       writeConfig(ctx, { baseUrl: BASE_URL })
-      expect(() => plugin.probe(ctx)).toThrow(/baseUrl and managementKey/)
+      expect(() => plugin.probe(ctx)).toThrow(/Settings → Plugin Settings/)
+    })
+
+    it("falls through to the next relay address when one is unreachable, and remembers it", () => {
+      writeConfig(ctx, { baseUrl: "http://100.64.0.1:8317, http://relay.test:8317/", managementKey: "secret-key" })
+      const relay = ctx.host.http.request
+      wireRelay(ctx, { files: [makeAccount({})] })
+      const wired = ctx.host.http.request
+      ctx.host.http.request = vi.fn((opts) => {
+        if (opts.url.startsWith("http://100.64.0.1:8317")) throw new Error("timeout")
+        return wired(opts)
+      })
+      expect(lineByLabel(plugin.probe(ctx), "Pool").value).toBe("1 account")
+      const urls = ctx.host.http.request.mock.calls.map(([opts]) => opts.url)
+      expect(urls[0]).toBe("http://100.64.0.1:8317/v0/management/auth-files")
+      expect(urls[1]).toBe(AUTH_FILES_URL)
+      expect(urls.filter((url) => url === API_CALL_URL)).toHaveLength(1)
+
+      // Next probe goes straight to the address that answered.
+      ctx.host.http.request.mockClear()
+      vi.setSystemTime(NOW_MS + 5 * 60 * 1000)
+      plugin.probe(ctx)
+      expect(ctx.host.http.request.mock.calls[0][0].url).toBe(AUTH_FILES_URL)
+      void relay
+    })
+
+    it("names every address when none answers", () => {
+      writeConfig(ctx, { baseUrl: "http://a:1 http://b:2", managementKey: "secret-key" })
+      ctx.host.http.request = vi.fn(() => {
+        throw new Error("connection refused")
+      })
+      expect(() => plugin.probe(ctx)).toThrow("Cannot reach CLIProxy at http://a:1, http://b:2")
+    })
+
+    it("does not fall through on an HTTP error, which is the relay answering", () => {
+      writeConfig(ctx, { baseUrl: `${BASE_URL}, http://second:8317`, managementKey: "secret-key" })
+      wireRelay(ctx, { files: [], authFiles: { status: 401, bodyText: JSON.stringify({ error: "invalid management key" }) } })
+      expect(() => plugin.probe(ctx)).toThrow(/CLIProxy 401: invalid management key/)
+      expect(ctx.host.http.request).toHaveBeenCalledTimes(1)
     })
 
     it("strips a trailing /v1 from the base url", () => {
@@ -287,20 +348,26 @@ describe("antigravity-pool plugin", () => {
     })
   })
 
-  describe("staggered fan-out", () => {
-    it("reads at most four accounts per probe", () => {
+  describe("fan-out", () => {
+    it("reads the whole pool in one probe", () => {
       writeConfig(ctx)
       wireRelay(ctx, { files: makePool() })
-      plugin.probe(ctx)
-      expect(apiCallCount(ctx)).toBe(4)
+      const result = plugin.probe(ctx)
+      expect(apiCallCount(ctx)).toBe(9)
+      expect(lineByLabel(result, "Pool").subtitle).toBeUndefined()
     })
 
-    it("merges cached accounts so the pool fills in over successive probes", () => {
+    it("stops at the time budget and fills the rest in on the next probe", () => {
       writeConfig(ctx)
       wireRelay(ctx, { files: makePool() })
+      // Every quota call costs 3s of wall clock: the 16s budget admits six.
+      const relay = ctx.host.http.request
+      ctx.host.http.request = vi.fn((opts) => {
+        if (opts.url === API_CALL_URL) vi.setSystemTime(Date.now() + 3000)
+        return relay(opts)
+      })
 
-      expect(lineByLabel(plugin.probe(ctx), "Pool").subtitle).toBe("4 sampled")
-      expect(lineByLabel(plugin.probe(ctx), "Pool").subtitle).toBe("8 sampled")
+      expect(lineByLabel(plugin.probe(ctx), "Pool").subtitle).toBe("6 sampled")
       expect(lineByLabel(plugin.probe(ctx), "Pool").subtitle).toBeUndefined()
       expect(apiCallCount(ctx)).toBe(9)
     })
@@ -309,10 +376,11 @@ describe("antigravity-pool plugin", () => {
       writeConfig(ctx)
       wireRelay(ctx, { files: [makeAccount({})] })
       plugin.probe(ctx)
+      vi.setSystemTime(NOW_MS + 3 * 60 * 1000)
       plugin.probe(ctx)
       expect(apiCallCount(ctx)).toBe(1)
 
-      vi.setSystemTime(NOW_MS + 41 * 60 * 1000)
+      vi.setSystemTime(NOW_MS + 5 * 60 * 1000)
       plugin.probe(ctx)
       expect(apiCallCount(ctx)).toBe(2)
     })
@@ -417,6 +485,119 @@ describe("antigravity-pool plugin", () => {
       const result = plugin.probe(ctx)
       expect(lineByLabel(result, "Gemini weekly").used).toBe(40)
       expect(lineByLabel(result, "Pool").subtitle).toBe("1 unreachable")
+    })
+  })
+
+  describe("per-account rows", () => {
+    const rowsOf = (result) => lineByLabel(result, "Accounts · 5h").rows
+
+    it("draws one row per account from the relay's request buckets, driest first", () => {
+      writeConfig(ctx)
+      const files = [
+        makeAccount({ auth_index: "a", project_id: "alien-agency-s1ttq", recent_requests: makeBuckets({ 5: 31, 6: 3, 17: 23 }) }),
+        makeAccount({ auth_index: "b", project_id: "yodeling-myth-g620j", recent_requests: makeBuckets({ 17: 8 }) }),
+      ]
+      wireRelay(ctx, { files, quotaFor: (idx) => (idx === "a" ? { gemFive: 0.93, gemWeek: 0.91 } : { gemFive: 0.65, gemWeek: 0.56 }) })
+      const line = lineByLabel(plugin.probe(ctx), "Accounts · 5h")
+
+      expect(line.type).toBe("histogram")
+      expect(line.columns).toEqual({ buckets: "requests", value: "5h left", note: "resets" })
+      expect(line.axis).toBe("17:20 → 20:40 relay time · 10-min buckets")
+      expect(line.rows.map((row) => row.label)).toEqual(["yodeling-myth", "alien-agency"])
+
+      const [driest, freshest] = line.rows
+      expect(driest).toMatchObject({ value: "65%", note: "1h 17m" })
+      expect(driest.buckets).toHaveLength(20)
+      expect(driest.buckets[17]).toBe(8)
+      expect(driest.tooltip).toBe("56% weekly left · resets in 10h 31m · 8 requests in the last 200m")
+      expect(driest.color).toBeUndefined()
+      expect(freshest.buckets[5]).toBe(31)
+      expect(freshest.tooltip).toContain("57 requests")
+    })
+
+    it("names accounts by project words, or by alias when configured", () => {
+      writeConfig(ctx, { baseUrl: BASE_URL, managementKey: "secret-key", aliases: { b: "work-2" } })
+      const files = [
+        makeAccount({ auth_index: "a", project_id: "alien-agency-s1ttq" }),
+        makeAccount({ auth_index: "b", project_id: "still-bond-8ds98" }),
+        makeAccount({ auth_index: "c123456", project_id: "" }),
+      ]
+      wireRelay(ctx, { files })
+      const labels = rowsOf(plugin.probe(ctx)).map((row) => row.label)
+      expect(labels).toEqual(expect.arrayContaining(["alien-agency", "work-2", "#c12345"]))
+    })
+
+    it("colours a nearly drained window", () => {
+      writeConfig(ctx)
+      const files = [makeAccount({ auth_index: "a" }), makeAccount({ auth_index: "b" }), makeAccount({ auth_index: "c" })]
+      wireRelay(ctx, { files, quotaFor: (idx) => ({ gemFive: idx === "a" ? 0.05 : idx === "b" ? 0.2 : 0.5 }) })
+      const rows = rowsOf(plugin.probe(ctx))
+      expect(rows.map((row) => [row.value, row.color])).toEqual([
+        ["5%", "#ef4444"],
+        ["20%", "#f59e0b"],
+        ["50%", undefined],
+      ])
+    })
+
+    it("shows a relay cooldown in red and keeps that account out of the pool mean", () => {
+      writeConfig(ctx)
+      const retryAt = new Date(NOW_MS + 41 * 60 * 1000).toISOString()
+      const files = [
+        makeAccount({ auth_index: "a", cooldowns: [{ scope: "credential", reason: "credential_quota", retry_at: retryAt }] }),
+        makeAccount({ auth_index: "b" }),
+      ]
+      wireRelay(ctx, { files, quotaFor: (idx) => ({ gemWeek: idx === "a" ? 0.1 : 0.7 }) })
+      const result = plugin.probe(ctx)
+      const [cooling] = rowsOf(result)
+      expect(cooling).toMatchObject({ value: "cooling", note: "41m", color: "#ef4444" })
+      expect(cooling.tooltip).toContain("relay credential_quota · retries in 41m")
+      expect(lineByLabel(result, "Gemini weekly").used).toBe(30)
+      expect(lineByLabel(result, "Pool").subtitle).toBe("1 cooling")
+    })
+
+    it("ignores a cooldown that has already expired", () => {
+      writeConfig(ctx)
+      const retryAt = new Date(NOW_MS - 1000).toISOString()
+      wireRelay(ctx, { files: [makeAccount({ cooldowns: [{ reason: "quota", retry_at: retryAt }] })] })
+      const [row] = rowsOf(plugin.probe(ctx))
+      expect(row.value).toBe("90%")
+      expect(row.color).toBeUndefined()
+    })
+
+    it("handles a free-tier account with no 5h bucket, an idle window, and an offline account", () => {
+      writeConfig(ctx)
+      const files = [
+        makeAccount({ auth_index: "free" }),
+        makeAccount({ auth_index: "idle" }),
+        makeAccount({ auth_index: "off", disabled: true }),
+      ]
+      wireRelay(ctx, {
+        files,
+        quotaFor: (idx) => (idx === "free" ? { gemFive: null, gemWeek: 0.38 } : { gemFive: 1, fiveReset: null }),
+      })
+      const rows = rowsOf(plugin.probe(ctx))
+      expect(rows.map((row) => row.label)).toEqual(["project-1", "project-1", "project-1"])
+      const free = rows.find((row) => row.value === "wk only")
+      expect(free.note).toBe("wk 10h 31m")
+      expect(free.tooltip).toContain("no 5h bucket (free tier)")
+      const idle = rows.find((row) => row.value === "100%")
+      expect(idle.note).toBe("idle")
+      expect(rows[2]).toMatchObject({ value: "offline", note: "—", color: "#ef4444" })
+    })
+
+    it("marks an account the probe has not sampled yet", () => {
+      writeConfig(ctx)
+      wireRelay(ctx, { files: [makeAccount({ auth_index: "a" }), makeAccount({ auth_index: "b" })], quotaFor: (idx) => (idx === "b" ? { error: 500 } : {}) })
+      const rows = rowsOf(plugin.probe(ctx))
+      expect(rows[1]).toMatchObject({ value: "—", note: "sampling" })
+    })
+
+    it("says so when the relay sends no request history", () => {
+      writeConfig(ctx)
+      wireRelay(ctx, { files: [makeAccount({})] })
+      const line = lineByLabel(plugin.probe(ctx), "Accounts · 5h")
+      expect(line.axis).toBe("no request history from the relay")
+      expect(line.rows[0].buckets).toEqual([])
     })
   })
 

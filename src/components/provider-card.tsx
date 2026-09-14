@@ -8,6 +8,7 @@ import { Separator } from "@/components/ui/separator"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { SkeletonLines } from "@/components/skeleton-lines"
 import { UsageHeatmap } from "@/components/usage-heatmap"
+import { UsageHistogram } from "@/components/usage-histogram"
 import { PluginError } from "@/components/plugin-error"
 import { useNowTicker } from "@/hooks/use-now-ticker"
 import { REFRESH_COOLDOWN_MS, type DisplayMode, type ResetTimerDisplayMode, type TimeFormatMode } from "@/lib/settings"
@@ -377,6 +378,20 @@ function MetricLineRenderer({
         <UsageHeatmap
           days={line.days}
           format={line.format}
+          brandColor={line.color ?? brandColor}
+        />
+      </div>
+    )
+  }
+
+  if (line.type === "histogram") {
+    return (
+      <div>
+        <div className="text-sm font-medium mb-1.5">{line.label}</div>
+        <UsageHistogram
+          rows={line.rows}
+          columns={line.columns}
+          axis={line.axis}
           brandColor={line.color ?? brandColor}
         />
       </div>

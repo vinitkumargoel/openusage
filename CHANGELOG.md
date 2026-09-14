@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### New Features
+- feat: per-account 5h rows for the Antigravity Pool card — a request histogram from the relay's `recent_requests`, 5h remaining, reset countdown, relay cooldowns, and free-tier accounts, driest first
+- feat: `histogram` metric line type (rows of mini bar charts with value and note columns)
+- feat: plugins can declare `settings` in `plugin.json`; the Settings page renders them and writes the plugin's `config.json` (mode 600)
+
+### Chores
+- chore(antigravity-pool): refresh all pooled accounts every probe instead of four at a time
+
 ## v0.6.24
 
 ### New Features

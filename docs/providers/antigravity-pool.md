@@ -12,11 +12,19 @@ Run both only if you want both. They read different things and will show differe
 - **Auth:** `X-Management-Key` header, from a config file you write
 - **Quota:** fraction (0.0–1.0, where 1.0 = 100% remaining), per model group per window
 - **Quota windows:** weekly and 5-hour, **per account** — they do not line up across the pool
+- **Per-account rows:** one row per account with its request histogram, 5h remaining and reset, driest first
 - **Requires:** a reachable CLIProxy relay with at least one `antigravity` account
 
 ## Setup
 
-Enable the plugin in Settings — it is disabled by default. The first probe creates its data directory and then errors with the path, so the order is: enable, read the path off the card, write the file, refresh.
+Enable the plugin in Settings, then fill in **Settings → Plugin Settings → Antigravity Pool**:
+
+| Field | Value |
+|---|---|
+| Relay URL | `http://<relay>:8317`. Comma-separate several to try in order, e.g. Tailscale first, then LAN: the first that answers is used and remembered |
+| Management key | `MANAGEMENT_PASSWORD` from the relay's `.env` |
+
+Saving writes the plugin's `config.json` (mode 600) and re-probes the card. The same file can be written by hand:
 
 ```
 ~/Library/Application Support/com.sunstory.openusage/plugins_data/antigravity-pool/config.json
@@ -24,12 +32,15 @@ Enable the plugin in Settings — it is disabled by default. The first probe cre
 
 ```json
 {
-  "baseUrl": "http://relay.example:8317",
-  "managementKey": "<MANAGEMENT_PASSWORD from the relay's .env>"
+  "baseUrl": "http://100.105.72.106:8317, http://192.168.0.234:8317",
+  "managementKey": "<MANAGEMENT_PASSWORD from the relay's .env>",
+  "aliases": { "5e08993047420acb": "work-2" }
 }
 ```
 
-A trailing `/` or `/v1` on `baseUrl` is stripped. The key is sent as a header only — never in a URL, and request headers are not logged.
+`aliases` is optional and maps an account's `auth_index` to the name shown on its row. Without it, an account is named by its Cloud Code project id minus the random suffix (`alien-agency-s1ttq` → `alien-agency`).
+
+A trailing `/` or `/v1` on each address is stripped. Only a connection failure moves on to the next address; an HTTP error is the relay answering and is shown as-is. The key is sent as a header only — never in a URL, and request headers are not logged.
 
 > **Five consecutive bad-key attempts ban your IP for ~30 minutes**, localhost included. The relay answers `{"error":"IP banned due to too many failed attempts..."}`, which the card shows verbatim. Don't guess the key.
 
@@ -61,9 +72,11 @@ X-Management-Key: <key>
 }
 ```
 
-One call, and it carries both the roster and the request counters. Non-`antigravity` entries are skipped.
+One call, and it carries the roster, the request counters, the request history and the cooldowns. Non-`antigravity` entries are skipped.
 
-`recent_requests` is only 20 buckets (~3h20m) and stamped in the *relay's* local wall clock with no date, so the plugin ignores it.
+`recent_requests` is 20 ten-minute buckets (~3h20m) stamped in the *relay's* local wall clock with no date. That is exactly the span the per-account rows draw, so the plugin keeps the buckets as they are and labels the axis in relay time.
+
+`cooldowns` lists the timers the relay set after a 429 (`reason`, `retry_at`, `remaining_seconds`). An account with a live cooldown is shown as cooling and left out of the pool mean, because the relay will not route to it anyway.
 
 ### api-call — one account's quota
 
@@ -126,7 +139,8 @@ The reply wraps the upstream one; `body` is a JSON *string*:
 |---|---|---|
 | Gemini weekly | overview | Mean remaining across live accounts; counts down to the **earliest** reset in the pool |
 | Gemini 5h | overview | Same, 5-hour window |
-| Pool | overview | Account count, with a subtitle when some are offline, unreachable, or not yet sampled |
+| Pool | overview | Account count, with a subtitle when some are offline, cooling, unreachable, or not yet sampled |
+| Accounts · 5h | detail | One row per account: its last 3h20m of requests as a histogram, 5h left, and the 5h reset. Driest first |
 | *N* accounts | detail | One row per reset cohort — only when the windows are actually skewed |
 | Claude & GPT | detail | One line, because it is usually untouched |
 | Rotation | detail | Pool error rate; names an account failing well above it, red when one is offline |
@@ -140,15 +154,30 @@ Requests are handed out round-robin, so the pool behaves like one account holdin
 
 Disabled and unavailable accounts are left out of the mean and counted in the `Pool` line instead.
 
+### Per-account rows
+
+Each row is one account. The bars are the relay's `recent_requests` buckets (10 minutes each, last ~3h20m), tinted by quartile across the whole block so a quiet account looks quiet next to a busy one. The two columns on the right are the 5h window: how much is left and when it resets. Hovering a row shows the weekly figure, its reset, and the request count for the span.
+
+| Row reads | Meaning |
+|---|---|
+| `65% · 2h 58m` | 5h left, resets in 2h 58m. Red under 10%, amber under 25% |
+| `cooling · 41m` | The relay parked this account after a 429 and retries in 41m |
+| `wk only · wk 2d 3h` | Free tier: no 5h bucket, so the weekly reset is shown instead |
+| `100% · idle` | The 5h window has not started (no reset time yet) |
+| `— · sampling` | Quota not read yet this probe |
+| `offline` | Disabled or unavailable on the relay |
+
+Rows are sorted driest first: cooling, then by 5h left (weekly stands in for free tier), then unsampled, then offline.
+
 ### Reset cohorts
 
 Weekly windows start whenever an account was first used, so a pool has several. Accounts resetting in the same hour are grouped into a cohort, and the rows only appear when there is more than one — a single cohort is already described by the weekly bar's own countdown.
 
 This is the difference between "73% left" and knowing that six accounts refill tonight and the other three not until Friday.
 
-### Staggered fan-out
+### Fan-out
 
-One quota call per account, ~1.6s each, against a 30s probe deadline. So each probe refreshes at most **4** accounts, stops fanning out after **12s**, and merges the rest from disk. Accounts are re-read when their cached reading is over **40 minutes** old, which at the default 15-minute interval sweeps a 9-account pool in ~30 minutes. A refresh that fails keeps showing the cached reading.
+One quota call per account, ~1.5s each, against a 30s probe deadline. Every probe refreshes the whole pool (up to **9** accounts) and stops fanning out after **16s**, merging anything left from disk; those accounts are picked up first on the next probe. A reading younger than **4 minutes** is not re-read, so a manual refresh right after a scheduled one does not hit Google twice. A refresh that fails keeps showing the cached reading.
 
 ### The heatmap
 
@@ -160,10 +189,10 @@ Two increments are never counted: an account seen for the first time (its lifeti
 
 ## Plugin Strategy
 
-1. Read `config.json` from the plugin data dir; fail loudly with the directory path if it is missing.
-2. `GET /v0/management/auth-files` → the `antigravity` accounts, sorted by `auth_index` so the stagger is deterministic.
+1. Read `config.json` from the plugin data dir; fail loudly pointing at Settings if it is missing.
+2. `GET /v0/management/auth-files` → the `antigravity` accounts with their request buckets and cooldowns, sorted by `auth_index`.
 3. Fold the `success` counters into today's request bucket; drop accounts that left the pool.
-4. Pick up to 4 accounts whose cached reading is over 40 minutes old, oldest first, and fetch each one's quota until the 12s budget is spent.
+4. Fetch quota for every account whose cached reading is over 4 minutes old, oldest first, until the 16s budget is spent.
 5. Persist state to `pool-state.json`, then aggregate cached and fresh readings together.
 6. If nothing has ever been sampled, error with the last upstream failure.
 
@@ -171,7 +200,7 @@ Two increments are never counted: an account seen for the first time (its lifeti
 
 Both live in the plugin data dir shown under [Setup](#setup).
 
-- `config.json` — you write this; base URL and management key
+- `config.json` — written by Settings → Plugin Settings (or by hand); base URL, management key, optional aliases
 - `pool-state.json` — per-account readings, request counters, daily history (400-day retention)
 
 Only `auth_index` is stored. Emails are read off the roster and dropped.

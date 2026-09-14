@@ -455,6 +455,46 @@ ctx.line.heatmap({
 })
 ```
 
+### `ctx.line.histogram(opts)`
+
+Creates a block of labelled mini bar charts (detail page): one row per series
+with its buckets on the left and a value and a note on the right. Bars are
+tinted with the plugin's `brandColor`; intensity comes from quartiles across
+every bucket in the block, so a quiet row looks quiet next to a busy one.
+
+```typescript
+ctx.line.histogram({
+  label: string,                        // Required: label shown above the rows
+  rows: [                               // Required: max 50 rows
+    {
+      label: string,                    // Row name, truncated at ~74px
+      buckets: number[],                // Bar heights, >= 0; max 60 per row
+      value: string,                    // Right column, e.g. "65%"
+      note: string,                     // Rightmost column, e.g. "2h 58m"
+      color?: string,                   // Optional: colour for `value`
+      tooltip?: string                  // Optional: shown on hover of the row
+    }
+  ],
+  columns?: { buckets: string, value: string, note: string }, // Optional captions
+  axis?: string,                        // Optional caption under the rows
+  color?: string                        // Optional: overrides the brand color
+}): MetricLine
+```
+
+Example:
+
+```javascript
+ctx.line.histogram({
+  label: "Accounts · 5h",
+  columns: { buckets: "requests", value: "5h left", note: "resets" },
+  axis: "17:20 → 20:40 relay time · 10-min buckets",
+  rows: [
+    { label: "alien-agency", buckets: [0, 31, 3, 0, 7], value: "65%", note: "2h 58m", tooltip: "56% weekly left" },
+    { label: "carbon-creek", buckets: [0, 0, 0, 0, 0], value: "cooling", note: "41m", color: "#ef4444" },
+  ],
+})
+```
+
 ## Formatters
 
 Helper functions for formatting values.

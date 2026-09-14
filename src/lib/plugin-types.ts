@@ -26,9 +26,29 @@ export type MetricLine =
       format?: ProgressFormat | null
       color?: string
     }
+  | {
+      type: "histogram"
+      label: string
+      rows: HistogramRow[]
+      columns?: HistogramColumns | null
+      axis?: string | null
+      color?: string
+    }
+
+/** One labelled row of small bars, with a value and a note on the right. */
+export type HistogramRow = {
+  label: string
+  buckets: number[]
+  value: string
+  note: string
+  color?: string
+  tooltip?: string
+}
+
+export type HistogramColumns = { buckets: string; value: string; note: string }
 
 export type ManifestLine = {
-  type: "text" | "progress" | "badge" | "heatmap"
+  type: "text" | "progress" | "badge" | "heatmap" | "histogram"
   label: string
   scope: "overview" | "detail"
 }
@@ -36,6 +56,15 @@ export type ManifestLine = {
 export type PluginLink = {
   label: string
   url: string
+}
+
+/** A field the Settings page renders for a plugin; saved to its config.json. */
+export type PluginSettingField = {
+  key: string
+  label: string
+  type: "text" | "url" | "secret"
+  placeholder?: string | null
+  help?: string | null
 }
 
 export type PluginOutput = {
@@ -55,6 +84,7 @@ export type PluginMeta = {
   links?: PluginLink[]
   /** Ordered list of primary metric candidates. Frontend picks first available. */
   primaryCandidates: string[]
+  settings?: PluginSettingField[]
 }
 
 export type PluginDisplayState = {

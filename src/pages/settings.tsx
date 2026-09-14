@@ -19,6 +19,7 @@ import { GripVertical } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { GlobalShortcutSection } from "@/components/global-shortcut-section";
+import { PluginSettingsSection } from "@/components/plugin-settings-section";
 import { getBarFillLayout, getTrayIconSizePx } from "@/lib/tray-bars-icon";
 import {
   AUTO_UPDATE_OPTIONS,
@@ -40,11 +41,13 @@ import {
 import { getTimeFormatter } from "@/lib/reset-tooltip";
 import type { TraySettingsPreview } from "@/hooks/app/use-tray-icon";
 import { cn } from "@/lib/utils";
+import type { PluginSettingField } from "@/lib/plugin-types";
 
 interface PluginConfig {
   id: string;
   name: string;
   enabled: boolean;
+  settings?: PluginSettingField[];
 }
 
 const TRAY_PREVIEW_SIZE_PX = getTrayIconSizePx(1);
@@ -284,6 +287,8 @@ interface SettingsPageProps {
   onGlobalShortcutChange: (value: GlobalShortcut) => void;
   startOnLogin: boolean;
   onStartOnLoginChange: (value: boolean) => void;
+  /** Fired after a plugin's settings are written, so its card re-probes. */
+  onPluginConfigSaved?: (pluginId: string) => void;
 }
 
 export function SettingsPage({
@@ -309,6 +314,7 @@ export function SettingsPage({
   onGlobalShortcutChange,
   startOnLogin,
   onStartOnLoginChange,
+  onPluginConfigSaved,
 }: SettingsPageProps) {
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -599,6 +605,12 @@ export function SettingsPage({
           </DndContext>
         </div>
       </section>
+      <PluginSettingsSection
+        plugins={plugins
+          .filter((plugin) => (plugin.settings?.length ?? 0) > 0)
+          .map((plugin) => ({ id: plugin.id, name: plugin.name, settings: plugin.settings ?? [] }))}
+        onSaved={onPluginConfigSaved}
+      />
     </div>
   );
 }

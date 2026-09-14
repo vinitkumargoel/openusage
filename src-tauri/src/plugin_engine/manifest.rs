@@ -21,6 +21,27 @@ pub struct PluginLink {
     pub url: String,
 }
 
+/// A field the Settings page renders for a plugin, saved to the plugin's
+/// `config.json`. `secret` fields are masked in the UI and never logged.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginSettingField {
+    pub key: String,
+    pub label: String,
+    #[serde(rename = "type", default = "default_setting_type")]
+    pub field_type: String,
+    #[serde(default)]
+    pub placeholder: Option<String>,
+    #[serde(default)]
+    pub help: Option<String>,
+}
+
+fn default_setting_type() -> String {
+    "text".to_string()
+}
+
+pub const PLUGIN_SETTING_TYPES: [&str; 3] = ["text", "url", "secret"];
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PluginManifest {
@@ -34,6 +55,8 @@ pub struct PluginManifest {
     pub lines: Vec<ManifestLine>,
     #[serde(default)]
     pub links: Vec<PluginLink>,
+    #[serde(default)]
+    pub settings: Vec<PluginSettingField>,
 }
 
 #[derive(Debug, Clone)]
@@ -76,6 +99,8 @@ fn load_single_plugin(
     let manifest_text = std::fs::read_to_string(&manifest_path)?;
     let mut manifest: PluginManifest = serde_json::from_str(&manifest_text)?;
     manifest.links = sanitize_plugin_links(&manifest.id, std::mem::take(&mut manifest.links));
+    manifest.settings =
+        sanitize_plugin_settings(&manifest.id, std::mem::take(&mut manifest.settings));
 
     // Validate primary_order: only progress lines can have it
     for line in manifest.lines.iter() {
@@ -149,12 +174,125 @@ fn sanitize_plugin_links(plugin_id: &str, links: Vec<PluginLink>) -> Vec<PluginL
         .collect()
 }
 
+/// Keys become JSON keys in config.json and path-free identifiers in the UI,
+/// so they are limited to identifier characters. Duplicates keep the first.
+fn sanitize_plugin_settings(
+    plugin_id: &str,
+    settings: Vec<PluginSettingField>,
+) -> Vec<PluginSettingField> {
+    let mut seen = std::collections::HashSet::new();
+    settings
+        .into_iter()
+        .filter_map(|field| {
+            let key = field.key.trim().to_string();
+            let label = field.label.trim().to_string();
+            let field_type = field.field_type.trim().to_string();
+            let key_ok = !key.is_empty()
+                && key.len() <= 64
+                && key
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '_');
+            if !key_ok || label.is_empty() {
+                log::warn!(
+                    "plugin {} has a setting with invalid key/label ('{}'); skipping",
+                    plugin_id,
+                    key
+                );
+                return None;
+            }
+            if !PLUGIN_SETTING_TYPES.contains(&field_type.as_str()) {
+                log::warn!(
+                    "plugin {} setting '{}' has unknown type '{}'; skipping",
+                    plugin_id,
+                    key,
+                    field_type
+                );
+                return None;
+            }
+            if !seen.insert(key.clone()) {
+                log::warn!(
+                    "plugin {} declares setting '{}' twice; keeping first",
+                    plugin_id,
+                    key
+                );
+                return None;
+            }
+            Some(PluginSettingField {
+                key,
+                label,
+                field_type,
+                placeholder: field.placeholder.map(|v| v.trim().to_string()),
+                help: field.help.map(|v| v.trim().to_string()),
+            })
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn parse_manifest(json: &str) -> PluginManifest {
         serde_json::from_str::<PluginManifest>(json).expect("manifest parse failed")
+    }
+
+    #[test]
+    fn settings_default_to_empty_and_parse_when_declared() {
+        let manifest = parse_manifest(
+            r#"
+            {
+              "schemaVersion": 1, "id": "x", "name": "X", "version": "0.0.1",
+              "entry": "plugin.js", "icon": "icon.svg", "brandColor": null, "lines": []
+            }
+            "#,
+        );
+        assert!(manifest.settings.is_empty());
+
+        let manifest = parse_manifest(
+            r#"
+            {
+              "schemaVersion": 1, "id": "x", "name": "X", "version": "0.0.1",
+              "entry": "plugin.js", "icon": "icon.svg", "brandColor": null, "lines": [],
+              "settings": [
+                { "key": "baseUrl", "label": "Relay URL", "type": "url", "placeholder": "http://relay:8317" },
+                { "key": "managementKey", "label": "Management key", "type": "secret", "help": "from .env" },
+                { "key": "note", "label": "Note" }
+              ]
+            }
+            "#,
+        );
+        assert_eq!(manifest.settings.len(), 3);
+        assert_eq!(manifest.settings[0].field_type, "url");
+        assert_eq!(manifest.settings[0].placeholder.as_deref(), Some("http://relay:8317"));
+        assert_eq!(manifest.settings[1].field_type, "secret");
+        assert_eq!(manifest.settings[1].help.as_deref(), Some("from .env"));
+        assert_eq!(manifest.settings[2].field_type, "text");
+    }
+
+    #[test]
+    fn sanitize_plugin_settings_drops_bad_keys_types_and_duplicates() {
+        let field = |key: &str, label: &str, field_type: &str| PluginSettingField {
+            key: key.to_string(),
+            label: label.to_string(),
+            field_type: field_type.to_string(),
+            placeholder: Some("  x ".to_string()),
+            help: None,
+        };
+        let out = sanitize_plugin_settings(
+            "x",
+            vec![
+                field(" baseUrl ", " Relay URL ", "url"),
+                field("../evil", "Evil", "text"),
+                field("", "Empty", "text"),
+                field("ok", "", "text"),
+                field("token", "Token", "password"),
+                field("baseUrl", "Again", "text"),
+            ],
+        );
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].key, "baseUrl");
+        assert_eq!(out[0].label, "Relay URL");
+        assert_eq!(out[0].placeholder.as_deref(), Some("x"));
     }
 
     #[test]

@@ -64,6 +64,19 @@ pub struct PluginMeta {
     /// Ordered list of primary metric candidates (sorted by primaryOrder).
     /// Frontend picks the first one that exists in runtime data.
     pub primary_candidates: Vec<String>,
+    /// Fields the Settings page renders for this plugin, if it declares any.
+    pub settings: Vec<PluginSettingFieldDto>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginSettingFieldDto {
+    pub key: String,
+    pub label: String,
+    #[serde(rename = "type")]
+    pub field_type: String,
+    pub placeholder: Option<String>,
+    pub help: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -403,9 +416,129 @@ fn list_plugins(state: tauri::State<'_, Mutex<AppState>>) -> Vec<PluginMeta> {
                     })
                     .collect(),
                 primary_candidates,
+                settings: plugin
+                    .manifest
+                    .settings
+                    .iter()
+                    .map(|field| PluginSettingFieldDto {
+                        key: field.key.clone(),
+                        label: field.label.clone(),
+                        field_type: field.field_type.clone(),
+                        placeholder: field.placeholder.clone(),
+                        help: field.help.clone(),
+                    })
+                    .collect(),
             }
         })
         .collect()
+}
+
+/// The declared setting keys of a plugin, or an error when the plugin is
+/// unknown — which is also what keeps `plugin_id` from becoming a path.
+fn plugin_setting_keys(
+    state: &tauri::State<'_, Mutex<AppState>>,
+    plugin_id: &str,
+) -> Result<(PathBuf, Vec<String>), String> {
+    let locked = state.lock().map_err(|_| "plugin state poisoned".to_string())?;
+    let plugin = locked
+        .plugins
+        .iter()
+        .find(|p| p.manifest.id == plugin_id)
+        .ok_or_else(|| format!("unknown plugin: {}", plugin_id))?;
+    let keys = plugin
+        .manifest
+        .settings
+        .iter()
+        .map(|field| field.key.clone())
+        .collect::<Vec<_>>();
+    if keys.is_empty() {
+        return Err(format!("plugin {} declares no settings", plugin_id));
+    }
+    let path = locked
+        .app_data_dir
+        .join("plugins_data")
+        .join(plugin_id)
+        .join("config.json");
+    Ok((path, keys))
+}
+
+fn read_plugin_config_file(path: &PathBuf) -> Result<serde_json::Map<String, serde_json::Value>, String> {
+    if !path.exists() {
+        return Ok(serde_json::Map::new());
+    }
+    let text = std::fs::read_to_string(path).map_err(|err| format!("read config: {}", err))?;
+    match serde_json::from_str::<serde_json::Value>(&text) {
+        Ok(serde_json::Value::Object(map)) => Ok(map),
+        Ok(_) => Err("config.json is not a JSON object".to_string()),
+        Err(err) => Err(format!("config.json is not valid JSON: {}", err)),
+    }
+}
+
+/// Writes the plugin config with owner-only permissions; the temp-then-rename
+/// keeps a half-written file from ever being what the plugin reads.
+fn write_plugin_config_file(
+    path: &PathBuf,
+    map: &serde_json::Map<String, serde_json::Value>,
+) -> Result<(), String> {
+    let dir = path
+        .parent()
+        .ok_or_else(|| "config path has no parent".to_string())?;
+    std::fs::create_dir_all(dir).map_err(|err| format!("create plugin data dir: {}", err))?;
+    let text = serde_json::to_string_pretty(&serde_json::Value::Object(map.clone()))
+        .map_err(|err| format!("serialize config: {}", err))?;
+    let tmp = path.with_extension("json.tmp");
+    std::fs::write(&tmp, text).map_err(|err| format!("write config: {}", err))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o600))
+            .map_err(|err| format!("chmod config: {}", err))?;
+    }
+    std::fs::rename(&tmp, path).map_err(|err| format!("replace config: {}", err))?;
+    Ok(())
+}
+
+/// Declared settings values for a plugin. Values are never logged.
+#[tauri::command]
+fn get_plugin_config(
+    state: tauri::State<'_, Mutex<AppState>>,
+    plugin_id: String,
+) -> Result<HashMap<String, String>, String> {
+    let (path, keys) = plugin_setting_keys(&state, &plugin_id)?;
+    let map = read_plugin_config_file(&path)?;
+    let mut out = HashMap::new();
+    for key in keys {
+        if let Some(serde_json::Value::String(value)) = map.get(&key) {
+            out.insert(key, value.clone());
+        }
+    }
+    Ok(out)
+}
+
+/// Merges declared settings into the plugin's config.json, keeping any other
+/// keys the file already has. An empty value removes the key.
+#[tauri::command]
+fn set_plugin_config(
+    state: tauri::State<'_, Mutex<AppState>>,
+    plugin_id: String,
+    values: HashMap<String, String>,
+) -> Result<(), String> {
+    let (path, keys) = plugin_setting_keys(&state, &plugin_id)?;
+    let mut map = read_plugin_config_file(&path)?;
+    for (key, value) in values {
+        if !keys.contains(&key) {
+            return Err(format!("plugin {} has no setting '{}'", plugin_id, key));
+        }
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            map.remove(&key);
+        } else {
+            map.insert(key, serde_json::Value::String(trimmed.to_string()));
+        }
+    }
+    write_plugin_config_file(&path, &map)?;
+    log::info!("[plugin:{}] settings saved", plugin_id);
+    Ok(())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -439,7 +572,9 @@ pub fn run() {
             start_probe_batch,
             list_plugins,
             get_log_path,
-            update_global_shortcut
+            update_global_shortcut,
+            get_plugin_config,
+            set_plugin_config
         ])
         .setup(|app| {
             #[cfg(target_os = "macos")]
@@ -533,7 +668,61 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{MAX_CONCURRENT_PROBES, probe_worker_count};
+    use super::{
+        MAX_CONCURRENT_PROBES, probe_worker_count, read_plugin_config_file,
+        write_plugin_config_file,
+    };
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_config_path(label: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        std::env::temp_dir()
+            .join(format!("openusage-config-{}-{}", label, nanos))
+            .join("plugins_data")
+            .join("x")
+            .join("config.json")
+    }
+
+    #[test]
+    fn plugin_config_round_trips_and_keeps_unknown_keys() {
+        let path = temp_config_path("roundtrip");
+        assert!(read_plugin_config_file(&path).unwrap().is_empty());
+
+        let mut map = serde_json::Map::new();
+        map.insert("aliases".to_string(), serde_json::json!({ "abc": "work" }));
+        map.insert("baseUrl".to_string(), serde_json::json!("http://relay:8317"));
+        write_plugin_config_file(&path, &map).unwrap();
+
+        let read = read_plugin_config_file(&path).unwrap();
+        assert_eq!(read.get("baseUrl"), Some(&serde_json::json!("http://relay:8317")));
+        assert_eq!(read.get("aliases"), Some(&serde_json::json!({ "abc": "work" })));
+        assert!(!path.with_extension("json.tmp").exists());
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+            assert_eq!(mode, 0o600);
+        }
+    }
+
+    #[test]
+    fn plugin_config_rejects_non_object_json() {
+        let path = temp_config_path("array");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, "[1, 2]").unwrap();
+        assert!(read_plugin_config_file(&path)
+            .unwrap_err()
+            .contains("not a JSON object"));
+        std::fs::write(&path, "{not json").unwrap();
+        assert!(read_plugin_config_file(&path)
+            .unwrap_err()
+            .contains("not valid JSON"));
+    }
 
     #[test]
     fn probe_worker_count_is_bounded() {

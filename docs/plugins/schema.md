@@ -66,6 +66,7 @@ Bundled plugins live under `src-tauri/resources/bundled_plugins/<id>/`.
 | `entry`         | string | Yes      | Relative path to JS entry file             |
 | `icon`          | string | Yes      | Relative path to SVG icon file             |
 | `links`         | array  | No       | Optional quick links shown on detail page  |
+| `settings`      | array  | No       | Fields the Settings page renders; saved to the plugin's `config.json` |
 | `lines`         | array  | Yes      | Output shape used for loading skeletons    |
 
 Validation rules:
@@ -83,6 +84,28 @@ Validation rules:
 | `label` | string | Yes      | Link text shown in the provider detail quick-actions row |
 | `url`   | string | Yes      | External destination opened in the browser (`http/https` only) |
 
+### Settings Array (Optional)
+
+Declare fields and the app renders them under Settings → Plugin Settings. Values
+are written to `<app data dir>/plugins_data/<id>/config.json` (mode 600) as
+top-level string keys, which the plugin reads with `ctx.host.fs`. Other keys in
+that file are left untouched, and saving re-probes the plugin.
+
+| Field         | Type   | Required | Description |
+|---------------|--------|----------|-------------|
+| `key`         | string | Yes      | JSON key in `config.json`; letters, digits, `_` |
+| `label`       | string | Yes      | Field label |
+| `type`        | string | No       | `text` (default), `url`, or `secret` (masked, never logged) |
+| `placeholder` | string | No       | Placeholder text |
+| `help`        | string | No       | One line of help under the field |
+
+```json
+"settings": [
+  { "key": "baseUrl", "label": "Relay URL", "type": "url", "placeholder": "http://relay:8317" },
+  { "key": "managementKey", "label": "Management key", "type": "secret" }
+]
+```
+
 ## Output Shape Declaration
 
 Plugins must declare their output shape in `plugin.json`. This enables the UI to render
@@ -92,7 +115,7 @@ loading skeletons instantly while probes execute asynchronously.
 
 | Field     | Type    | Required | Description                                       |
 |-----------|---------|----------|---------------------------------------------------|
-| `type`    | string  | Yes      | One of: `text`, `progress`, `badge`, `heatmap`    |
+| `type`    | string  | Yes      | One of: `text`, `progress`, `badge`, `heatmap`, `histogram` |
 | `label`   | string  | Yes      | Static label shown in the UI for this line        |
 | `scope`   | string  | Yes      | `"overview"` or `"detail"` - where line appears   |
 | `primary` | boolean | No       | If `true`, this progress line appears in tray icon |
@@ -161,6 +184,15 @@ type MetricLine =
       color?: string;
     }
   | { type: "badge"; label: string; text: string; color?: string; subtitle?: string }
+  | { type: "heatmap"; label: string; days: { date: string; value: number; tokens?: number }[]; format?: ProgressFormat; color?: string }
+  | {
+      type: "histogram";
+      label: string;
+      rows: { label: string; buckets: number[]; value: string; note: string; color?: string; tooltip?: string }[];
+      columns?: { buckets: string; value: string; note: string };
+      axis?: string;
+      color?: string;
+    }
 ```
 
 - `color`: optional hex string (e.g. `#22c55e`)

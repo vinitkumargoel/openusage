@@ -1001,6 +1001,13 @@ pub fn inject_utils(ctx: &rquickjs::Ctx<'_>) -> rquickjs::Result<()> {
                     if (opts.format) line.format = opts.format;
                     if (opts.color) line.color = opts.color;
                     return line;
+                },
+                histogram: function(opts) {
+                    var line = { type: "histogram", label: opts.label, rows: opts.rows };
+                    if (opts.columns) line.columns = opts.columns;
+                    if (opts.axis) line.axis = opts.axis;
+                    if (opts.color) line.color = opts.color;
+                    return line;
                 }
             };
 

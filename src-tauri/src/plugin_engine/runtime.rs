@@ -47,7 +47,42 @@ pub enum MetricLine {
         format: Option<ProgressFormat>,
         color: Option<String>,
     },
+    /// Rows of small bar charts: one labelled row per series (an account, a
+    /// model), each with a value column and a note column on the right.
+    Histogram {
+        label: String,
+        rows: Vec<HistogramRow>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        columns: Option<HistogramColumns>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        axis: Option<String>,
+        color: Option<String>,
+    },
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HistogramRow {
+    pub label: String,
+    pub buckets: Vec<f64>,
+    pub value: String,
+    pub note: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tooltip: Option<String>,
+}
+
+/// Captions over the three columns of a histogram line.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HistogramColumns {
+    pub buckets: String,
+    pub value: String,
+    pub note: String,
+}
+
+/// Caps on histogram payloads — a pool of accounts, not a time series.
+const MAX_HISTOGRAM_ROWS: usize = 50;
+const MAX_HISTOGRAM_BUCKETS: usize = 60;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HeatmapDay {
@@ -539,6 +574,40 @@ fn parse_lines(result: &Object) -> Result<Vec<MetricLine>, String> {
                     color,
                 });
             }
+            "histogram" => {
+                let rows_array: Array = match line.get("rows") {
+                    Ok(arr) => arr,
+                    Err(_) => {
+                        out.push(error_line(format!(
+                            "histogram line at index {} missing rows array",
+                            idx
+                        )));
+                        continue;
+                    }
+                };
+                let rows = match parse_histogram_rows(&rows_array, idx) {
+                    Ok(rows) => rows,
+                    Err(msg) => {
+                        out.push(error_line(msg));
+                        continue;
+                    }
+                };
+                let columns = match parse_histogram_columns(&line, idx) {
+                    Ok(columns) => columns,
+                    Err(msg) => {
+                        out.push(error_line(msg));
+                        continue;
+                    }
+                };
+                let axis = line.get::<_, String>("axis").ok();
+                out.push(MetricLine::Histogram {
+                    label,
+                    rows,
+                    columns,
+                    axis,
+                    color,
+                });
+            }
             _ => {
                 out.push(error_line(format!(
                     "unknown line type at index {}: {}",
@@ -733,6 +802,116 @@ fn probe_timeout_message(timeout: Duration) -> String {
     format!("probe timed out after {:.3}s", timeout.as_secs_f64())
 }
 
+fn parse_histogram_rows(rows_array: &Array, line_idx: usize) -> Result<Vec<HistogramRow>, String> {
+    let total = rows_array.len();
+    let take = total.min(MAX_HISTOGRAM_ROWS);
+    if total > MAX_HISTOGRAM_ROWS {
+        log::warn!(
+            "histogram line at index {} has {} rows, keeping first {}",
+            line_idx,
+            total,
+            MAX_HISTOGRAM_ROWS
+        );
+    }
+
+    let mut rows = Vec::with_capacity(take);
+    for row_idx in 0..take {
+        let entry: Object = rows_array.get(row_idx).map_err(|_| {
+            format!(
+                "histogram line at index {}: invalid row at index {}",
+                line_idx, row_idx
+            )
+        })?;
+        let label = entry.get::<_, String>("label").unwrap_or_default();
+        let value = entry.get::<_, String>("value").unwrap_or_default();
+        let note = entry.get::<_, String>("note").unwrap_or_default();
+        let color = entry.get::<_, String>("color").ok();
+        let tooltip = entry.get::<_, String>("tooltip").ok();
+        let buckets_array: Array = entry.get("buckets").map_err(|_| {
+            format!(
+                "histogram line at index {}: row at index {} missing buckets array",
+                line_idx, row_idx
+            )
+        })?;
+        let bucket_total = buckets_array.len();
+        let bucket_take = bucket_total.min(MAX_HISTOGRAM_BUCKETS);
+        if bucket_total > MAX_HISTOGRAM_BUCKETS {
+            log::warn!(
+                "histogram line at index {}: row at index {} has {} buckets, keeping first {}",
+                line_idx,
+                row_idx,
+                bucket_total,
+                MAX_HISTOGRAM_BUCKETS
+            );
+        }
+        let mut buckets = Vec::with_capacity(bucket_take);
+        for bucket_idx in 0..bucket_take {
+            let raw: Value = buckets_array.get(bucket_idx).map_err(|_| {
+                format!(
+                    "histogram line at index {}: row at index {} invalid bucket at index {}",
+                    line_idx, row_idx, bucket_idx
+                )
+            })?;
+            let value = raw.as_number().ok_or_else(|| {
+                format!(
+                    "histogram line at index {}: row at index {} bucket at index {} invalid value (expected number)",
+                    line_idx, row_idx, bucket_idx
+                )
+            })?;
+            if !value.is_finite() || value < 0.0 {
+                return Err(format!(
+                    "histogram line at index {}: row at index {} bucket at index {} invalid value: {}",
+                    line_idx, row_idx, bucket_idx, value
+                ));
+            }
+            buckets.push(value);
+        }
+        rows.push(HistogramRow {
+            label,
+            buckets,
+            value,
+            note,
+            color,
+            tooltip,
+        });
+    }
+    Ok(rows)
+}
+
+/// Optional column captions. Missing/null is fine; a present-but-incomplete
+/// object is an error so plugin bugs stay loud.
+fn parse_histogram_columns(
+    line: &Object,
+    line_idx: usize,
+) -> Result<Option<HistogramColumns>, String> {
+    let raw: Value = match line.get("columns") {
+        Ok(v) => v,
+        Err(_) => return Ok(None),
+    };
+    if raw.is_null() || raw.is_undefined() {
+        return Ok(None);
+    }
+    let obj = raw.as_object().ok_or_else(|| {
+        format!(
+            "histogram line at index {}: columns must be an object",
+            line_idx
+        )
+    })?;
+    let field = |name: &str| -> Result<String, String> {
+        obj.get::<_, String>(name).map_err(|_| {
+            format!(
+                "histogram line at index {}: columns missing '{}'",
+                line_idx, name
+            )
+        })
+    };
+    Ok(Some(HistogramColumns {
+        buckets: field("buckets")?,
+        value: field("value")?,
+        note: field("note")?,
+    }))
+}
+
 fn error_line(message: String) -> MetricLine {
     MetricLine::Badge {
         label: "Error".to_string(),
@@ -762,6 +941,7 @@ mod tests {
                 brand_color: None,
                 lines: vec![],
                 links: vec![],
+                settings: vec![],
             },
             plugin_dir: PathBuf::from("."),
             entry_script: entry_script.to_string(),
@@ -781,6 +961,146 @@ mod tests {
         match output.lines.first() {
             Some(MetricLine::Badge { text, .. }) => text.clone(),
             other => panic!("expected error badge, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn histogram_line_parses_rows_columns_and_axis() {
+        let plugin = test_plugin(
+            r##"
+            globalThis.__openusage_plugin = {
+                probe() {
+                    return { lines: [{
+                        type: "histogram",
+                        label: "Accounts · 5h",
+                        columns: { buckets: "requests", value: "5h left", note: "resets" },
+                        axis: "17:20 → 20:40 · 10-min buckets",
+                        rows: [
+                            { label: "alien-agency", buckets: [0, 31, 3, 0], value: "65%", note: "2h 58m", tooltip: "weekly 56% left" },
+                            { label: "carbon-creek", buckets: [], value: "cooling", note: "41m", color: "#ef4444" }
+                        ]
+                    }] };
+                }
+            };
+            "##,
+        );
+        let output = run_probe(&plugin, &temp_app_dir("histogram-ok"), "0.0.0");
+        match &output.lines[0] {
+            MetricLine::Histogram {
+                label,
+                rows,
+                columns,
+                axis,
+                color,
+            } => {
+                assert_eq!(label, "Accounts · 5h");
+                assert_eq!(rows.len(), 2);
+                assert_eq!(rows[0].label, "alien-agency");
+                assert_eq!(rows[0].buckets, vec![0.0, 31.0, 3.0, 0.0]);
+                assert_eq!(rows[0].value, "65%");
+                assert_eq!(rows[0].note, "2h 58m");
+                assert_eq!(rows[0].tooltip.as_deref(), Some("weekly 56% left"));
+                assert!(rows[0].color.is_none());
+                assert!(rows[1].buckets.is_empty());
+                assert_eq!(rows[1].color.as_deref(), Some("#ef4444"));
+                let columns = columns.as_ref().expect("columns");
+                assert_eq!(columns.value, "5h left");
+                assert_eq!(axis.as_deref(), Some("17:20 → 20:40 · 10-min buckets"));
+                assert!(color.is_none());
+            }
+            other => panic!("expected histogram line, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn histogram_line_without_columns_serializes_without_them() {
+        let plugin = test_plugin(
+            r#"
+            globalThis.__openusage_plugin = {
+                probe() {
+                    return { lines: [{ type: "histogram", label: "Rows", rows: [{ label: "a", buckets: [1], value: "1", note: "" }] }] };
+                }
+            };
+            "#,
+        );
+        let output = run_probe(&plugin, &temp_app_dir("histogram-min"), "0.0.0");
+        let json = serde_json::to_value(&output.lines[0]).expect("serialize");
+        assert_eq!(json["type"], JsonValue::String("histogram".to_string()));
+        assert!(json.get("columns").is_none());
+        assert!(json.get("axis").is_none());
+        assert!(json["rows"][0].get("tooltip").is_none());
+        assert_eq!(json["rows"][0]["buckets"], serde_json::json!([1.0]));
+    }
+
+    #[test]
+    fn histogram_line_with_negative_bucket_becomes_error_line() {
+        let plugin = test_plugin(
+            r#"
+            globalThis.__openusage_plugin = {
+                probe() {
+                    return { lines: [{ type: "histogram", label: "Rows", rows: [{ label: "a", buckets: [1, -2], value: "", note: "" }] }] };
+                }
+            };
+            "#,
+        );
+        let output = run_probe(&plugin, &temp_app_dir("histogram-neg"), "0.0.0");
+        assert!(error_text(output).contains("bucket at index 1 invalid value"));
+    }
+
+    #[test]
+    fn histogram_line_missing_rows_becomes_error_line() {
+        let plugin = test_plugin(
+            r#"
+            globalThis.__openusage_plugin = {
+                probe() {
+                    return { lines: [{ type: "histogram", label: "Rows" }] };
+                }
+            };
+            "#,
+        );
+        let output = run_probe(&plugin, &temp_app_dir("histogram-norows"), "0.0.0");
+        assert!(error_text(output).contains("missing rows array"));
+    }
+
+    #[test]
+    fn histogram_line_with_incomplete_columns_becomes_error_line() {
+        let plugin = test_plugin(
+            r#"
+            globalThis.__openusage_plugin = {
+                probe() {
+                    return { lines: [{ type: "histogram", label: "Rows", columns: { buckets: "x" }, rows: [] }] };
+                }
+            };
+            "#,
+        );
+        let output = run_probe(&plugin, &temp_app_dir("histogram-cols"), "0.0.0");
+        assert!(error_text(output).contains("columns missing 'value'"));
+    }
+
+    #[test]
+    fn histogram_rows_and_buckets_are_capped() {
+        let plugin = test_plugin(
+            r#"
+            globalThis.__openusage_plugin = {
+                probe() {
+                    var rows = [];
+                    for (var i = 0; i < 60; i++) {
+                        var buckets = [];
+                        for (var j = 0; j < 80; j++) buckets.push(j);
+                        rows.push({ label: "r" + i, buckets: buckets, value: "", note: "" });
+                    }
+                    return { lines: [{ type: "histogram", label: "Rows", rows: rows }] };
+                }
+            };
+            "#,
+        );
+        let output = run_probe(&plugin, &temp_app_dir("histogram-cap"), "0.0.0");
+        match &output.lines[0] {
+            MetricLine::Histogram { rows, .. } => {
+                assert_eq!(rows.len(), MAX_HISTOGRAM_ROWS);
+                assert_eq!(rows[0].buckets.len(), MAX_HISTOGRAM_BUCKETS);
+            }
+            other => panic!("expected histogram line, got {:?}", other),
         }
     }
 

@@ -1,11 +1,13 @@
 import { useMemo } from "react"
-import type { PluginMeta } from "@/lib/plugin-types"
+import type { PluginMeta, PluginSettingField } from "@/lib/plugin-types"
 import type { PluginSettings } from "@/lib/settings"
 
 export type SettingsPluginState = {
   id: string
   name: string
   enabled: boolean
+  /** Fields the plugin asks the Settings page to render, if any. */
+  settings: PluginSettingField[]
 }
 
 type UseSettingsPluginListArgs = {
@@ -26,6 +28,7 @@ export function useSettingsPluginList({ pluginSettings, pluginsMeta }: UseSettin
           id,
           name: meta.name,
           enabled: !pluginSettings.disabled.includes(id),
+          settings: meta.settings ?? [],
         }
       })
       .filter((plugin): plugin is SettingsPluginState => Boolean(plugin))
