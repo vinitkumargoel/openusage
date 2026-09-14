@@ -823,8 +823,18 @@ fn parse_histogram_rows(rows_array: &Array, line_idx: usize) -> Result<Vec<Histo
             )
         })?;
         let label = entry.get::<_, String>("label").unwrap_or_default();
-        let value = entry.get::<_, String>("value").unwrap_or_default();
-        let note = entry.get::<_, String>("note").unwrap_or_default();
+        let value = entry.get::<_, String>("value").map_err(|_| {
+            format!(
+                "histogram line at index {}: row at index {} 'value' must be a string",
+                line_idx, row_idx
+            )
+        })?;
+        let note = entry.get::<_, String>("note").map_err(|_| {
+            format!(
+                "histogram line at index {}: row at index {} 'note' must be a string",
+                line_idx, row_idx
+            )
+        })?;
         let color = entry.get::<_, String>("color").ok();
         let tooltip = entry.get::<_, String>("tooltip").ok();
         let buckets_array: Array = entry.get("buckets").map_err(|_| {
@@ -837,7 +847,7 @@ fn parse_histogram_rows(rows_array: &Array, line_idx: usize) -> Result<Vec<Histo
         let bucket_take = bucket_total.min(MAX_HISTOGRAM_BUCKETS);
         if bucket_total > MAX_HISTOGRAM_BUCKETS {
             log::warn!(
-                "histogram line at index {}: row at index {} has {} buckets, keeping first {}",
+                "histogram line at index {}: row at index {} has {} buckets, keeping last {}",
                 line_idx,
                 row_idx,
                 bucket_total,
@@ -845,7 +855,8 @@ fn parse_histogram_rows(rows_array: &Array, line_idx: usize) -> Result<Vec<Histo
             );
         }
         let mut buckets = Vec::with_capacity(bucket_take);
-        for bucket_idx in 0..bucket_take {
+        // Rows are time series, so an over-long one is trimmed from the front.
+        for bucket_idx in (bucket_total - bucket_take)..bucket_total {
             let raw: Value = buckets_array.get(bucket_idx).map_err(|_| {
                 format!(
                     "histogram line at index {}: row at index {} invalid bucket at index {}",

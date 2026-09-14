@@ -125,6 +125,15 @@ function writeConfig(ctx, config = { baseUrl: BASE_URL, managementKey: "secret-k
   ctx.host.fs.writeText(`${ctx.app.pluginDataDir}/config.json`, JSON.stringify(config))
 }
 
+// The plugin keys days in local time, so tests must too.
+const dayKeyOf = (ms) => {
+  const d = new Date(ms)
+  const m = d.getMonth() + 1
+  const day = d.getDate()
+  return `${d.getFullYear()}-${m < 10 ? "0" : ""}${m}-${day < 10 ? "0" : ""}${day}`
+}
+const todayKey = () => dayKeyOf(NOW_MS)
+
 const lineByLabel = (result, label) => result.lines.find((line) => line.label === label)
 const apiCallCount = (ctx) =>
   ctx.host.http.request.mock.calls.filter(([opts]) => opts.url === API_CALL_URL).length
@@ -335,6 +344,19 @@ describe("antigravity-pool plugin", () => {
       expect(result.lines.filter((line) => /^\d+ accounts?$/.test(line.label))).toHaveLength(0)
     })
 
+    it("treats resets either side of the half hour as one cohort", () => {
+      // Twenty seconds apart, but they round to different hours.
+      writeConfig(ctx)
+      const files = [makeAccount({ auth_index: "a" }), makeAccount({ auth_index: "b" })]
+      wireRelay(ctx, {
+        files,
+        quotaFor: (idx) =>
+          idx === "a" ? { weeklyReset: "2026-09-01T17:29:50Z" } : { weeklyReset: "2026-09-01T17:30:10Z" },
+      })
+      const result = plugin.probe(ctx)
+      expect(result.lines.filter((line) => /^\d+ accounts?$/.test(line.label))).toHaveLength(0)
+    })
+
     it("treats resets minutes apart as one cohort", () => {
       writeConfig(ctx)
       const files = [makeAccount({ auth_index: "a" }), makeAccount({ auth_index: "b" })]
@@ -345,6 +367,46 @@ describe("antigravity-pool plugin", () => {
       })
       const result = plugin.probe(ctx)
       expect(result.lines.filter((line) => /^\d+ accounts?$/.test(line.label))).toHaveLength(0)
+    })
+  })
+
+  describe("weekly countdown", () => {
+    it("ignores a cached reset that has already passed", () => {
+      writeConfig(ctx)
+      const files = [makeAccount({ auth_index: "a" }), makeAccount({ auth_index: "b" })]
+      wireRelay(ctx, {
+        files,
+        quotaFor: (idx) =>
+          idx === "a" ? { weeklyReset: RESET_B } : { weeklyReset: "2026-09-01T09:00:00Z" },
+      })
+      plugin.probe(ctx)
+
+      // Past b's reset, and b's relay call now fails — so its stale reading,
+      // whose reset instant is gone, is all that is left on disk for it.
+      vi.setSystemTime(Date.parse("2026-09-01T12:00:00Z"))
+      const wired = ctx.host.http.request
+      ctx.host.http.request = vi.fn((opts) => {
+        if (opts.url === API_CALL_URL && JSON.parse(opts.bodyText).authIndex === "b") {
+          throw new Error("connection refused")
+        }
+        return wired(opts)
+      })
+      const weekly = lineByLabel(plugin.probe(ctx), "Gemini weekly")
+      expect(weekly.resetsAt).toBe(RESET_B)
+    })
+
+    it("drops the countdown when every cached reset is in the past", () => {
+      writeConfig(ctx)
+      wireRelay(ctx, { files: [makeAccount({ auth_index: "a" })], quotaFor: () => ({ weeklyReset: RESET_A }) })
+      plugin.probe(ctx)
+
+      vi.setSystemTime(Date.parse("2026-09-09T07:12:39Z"))
+      const wired = ctx.host.http.request
+      ctx.host.http.request = vi.fn((opts) => {
+        if (opts.url === API_CALL_URL) throw new Error("connection refused")
+        return wired(opts)
+      })
+      expect(lineByLabel(plugin.probe(ctx), "Gemini weekly").resetsAt).toBeUndefined()
     })
   })
 
@@ -409,13 +471,6 @@ describe("antigravity-pool plugin", () => {
   })
 
   describe("request history", () => {
-    const todayKey = () => {
-      const d = new Date(NOW_MS)
-      const m = d.getMonth() + 1
-      const day = d.getDate()
-      return `${d.getFullYear()}-${m < 10 ? "0" : ""}${m}-${day < 10 ? "0" : ""}${day}`
-    }
-
     it("records nothing on the first sight of an account", () => {
       writeConfig(ctx)
       wireRelay(ctx, { files: [makeAccount({ success: 500 })] })
@@ -598,6 +653,87 @@ describe("antigravity-pool plugin", () => {
       const line = lineByLabel(plugin.probe(ctx), "Accounts · 5h")
       expect(line.axis).toBe("no request history from the relay")
       expect(line.rows[0].buckets).toEqual([])
+    })
+  })
+
+  describe("retention", () => {
+    it("keeps at most 400 day keys, so today is never the one the host drops", () => {
+      writeConfig(ctx)
+      const days = {}
+      for (let back = 0; back < 405; back += 1) {
+        days[dayKeyOf(NOW_MS - back * 24 * 60 * 60 * 1000)] = 1
+      }
+      ctx.host.fs.writeText(
+        `${ctx.app.pluginDataDir}/pool-state.json`,
+        JSON.stringify({ accounts: {}, counters: {}, days })
+      )
+      wireRelay(ctx, { files: [makeAccount({ auth_index: "a", success: 10 })] })
+      plugin.probe(ctx)
+      const stored = JSON.parse(ctx.host.fs.readText(`${ctx.app.pluginDataDir}/pool-state.json`))
+      const keys = Object.keys(stored.days).sort()
+      expect(keys.length).toBeLessThanOrEqual(400)
+      expect(keys[keys.length - 1]).toBe(todayKey())
+    })
+  })
+
+  describe("histogram grid", () => {
+    it("draws every row on one time grid, zero-filling a shorter series", () => {
+      writeConfig(ctx)
+      const full = makeBuckets({ 0: 3, 19: 4 })
+      wireRelay(ctx, {
+        files: [
+          makeAccount({ auth_index: "a", recent_requests: full }),
+          // Only the last three buckets of the same grid.
+          makeAccount({ auth_index: "b", recent_requests: full.slice(17).map((b) => ({ ...b, success: 2 })) }),
+        ],
+      })
+      const line = lineByLabel(plugin.probe(ctx), "Accounts · 5h")
+      const lengths = line.rows.map((row) => row.buckets.length)
+      expect(lengths).toEqual([20, 20])
+      const short = line.rows.find((row) => row.buckets[0] === 0 && row.buckets[19] === 2)
+      expect(short.buckets.slice(0, 17)).toEqual(new Array(17).fill(0))
+      // The axis is the grid, not the first row stitched to the last.
+      expect(line.axis).toBe("17:20 → 20:40 relay time · 10-min buckets")
+    })
+  })
+
+  describe("redaction", () => {
+    it("never stores or renders an account email", () => {
+      writeConfig(ctx)
+      wireRelay(ctx, { files: makePool() })
+      const result = plugin.probe(ctx)
+      expect(JSON.stringify(result)).not.toContain("pooled@example.com")
+      const stored = ctx.host.fs.readText(`${ctx.app.pluginDataDir}/pool-state.json`)
+      expect(stored).not.toContain("pooled@example.com")
+    })
+
+    it("never writes the management key into the pool state", () => {
+      writeConfig(ctx)
+      wireRelay(ctx, { files: [makeAccount({})] })
+      plugin.probe(ctx)
+      const stored = ctx.host.fs.readText(`${ctx.app.pluginDataDir}/pool-state.json`)
+      expect(stored).not.toContain("secret-key")
+    })
+  })
+
+  describe("malformed relay data", () => {
+    it("does not claim a window refills now when the reset is unparseable", () => {
+      writeConfig(ctx)
+      wireRelay(ctx, {
+        files: [makeAccount({ auth_index: "a" })],
+        quotaFor: () => ({ weeklyReset: "soon", fiveReset: "later" }),
+      })
+      const rows = lineByLabel(plugin.probe(ctx), "Accounts · 5h").rows
+      expect(rows[0].note).toBe("idle")
+      expect(rows[0].tooltip ?? "").not.toContain("resets in now")
+    })
+
+    it("says so loudly when the stored state is corrupt", () => {
+      writeConfig(ctx)
+      ctx.host.fs.writeText(`${ctx.app.pluginDataDir}/pool-state.json`, '{"days":{"2026-08-')
+      wireRelay(ctx, { files: [makeAccount({})] })
+      plugin.probe(ctx)
+      expect(ctx.host.log.error).toHaveBeenCalledWith(expect.stringContaining("pool-state.json"))
     })
   })
 

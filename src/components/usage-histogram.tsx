@@ -1,16 +1,22 @@
 import { memo, useMemo } from "react"
 import { useDarkMode } from "@/hooks/use-dark-mode"
-import { adjustBrandColor } from "@/lib/color"
+import { adjustBrandColor, FALLBACK_BASE_COLOR, LEVEL_MIX_DARK, LEVEL_MIX_LIGHT } from "@/lib/color"
 import { intensityLevel, quartileThresholds } from "@/components/usage-heatmap"
 import type { HistogramColumns, HistogramRow } from "@/lib/plugin-types"
 
-// Same brand mix as the heatmap so the two read as one system.
-const LEVEL_MIX_LIGHT = [25, 50, 75, 100]
-const LEVEL_MIX_DARK = [30, 55, 80, 100]
-const FALLBACK_BASE_COLOR = "#6b7280"
-
 const BAR_MAX_PX = 14
 const BAR_MIN_PX = 2
+
+/**
+ * What a screen reader reads for one row. It has to name every visible column,
+ * because an aria-label on the row replaces the name its children would compose
+ * — otherwise the 5h figure and the reset are announced to nobody.
+ */
+export function rowLabel(row: HistogramRow): string {
+  const parts = [row.label, row.value, row.note].filter((part) => part && part !== "—")
+  if (row.tooltip) parts.push(row.tooltip)
+  return parts.join(", ")
+}
 
 /** Bar height in px for a bucket; zero stays a visible 2px stub. */
 export function bucketHeight(value: number, max: number): number {
@@ -54,12 +60,12 @@ function UsageHistogramInner({ rows, columns, axis, brandColor }: UsageHistogram
         </div>
       )}
       <div className="flex flex-col gap-[3px]">
-        {rows.map((row, index) => (
+        {rows.map((row) => (
           <div
-            key={`${row.label}-${index}`}
+            key={row.label}
             className="flex items-center h-[18px] text-xs tabular-nums"
             title={row.tooltip}
-            aria-label={row.tooltip ? `${row.label}: ${row.tooltip}` : row.label}
+            aria-label={rowLabel(row)}
           >
             <span className="w-[74px] truncate pr-1">{row.label}</span>
             <span className="w-[100px] flex items-end gap-[1px] h-[14px]" aria-hidden="true">

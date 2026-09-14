@@ -7,8 +7,24 @@
 - feat: `histogram` metric line type (rows of mini bar charts with value and note columns)
 - feat: plugins can declare `settings` in `plugin.json`; the Settings page renders them and writes the plugin's `config.json` (mode 600)
 
+### Bug Fixes
+- fix(antigravity-pool): count down to the earliest reset **still ahead** — a cached reading from an account that stopped answering could point the weekly bar at an instant already in the past
+- fix(antigravity-pool): draw every per-account row on one shared time grid, so the same column is the same ten minutes on every row and the axis is the grid rather than one row's start stitched to another's end
+- fix(antigravity-pool): group reset cohorts by how far apart they are, not by which side of the half hour they round to — two resets twenty seconds apart no longer split into two rows
+- fix(antigravity-pool): measure the fan-out budget from the start of the probe, so roster + fan-out + one in-flight call stays under the host's 30s deadline
+- fix(antigravity-pool): an unparseable reset time no longer renders as "now", claiming the window refills this second
+- fix(antigravity-pool): keep 400 day keys, not 401 — the 401st pushed today's bar off the heatmap
+- fix(antigravity-pool): read live accounts before cooling ones, since only live accounts feed the pool mean
+- fix(antigravity-pool): relay and quota failures now carry the cause instead of collapsing to "request failed"; an unreadable `pool-state.json` is logged instead of silently restarting 400 days of history
+- fix(plugins): redact the management key, capitalised `Authorization`, and `user:pass@` URL credentials from logs
+- fix(plugins): write a plugin's `config.json` at mode 600 from the start, closing the window where the secret sat world-readable
+- fix(plugins): log a plugin that fails to load instead of dropping its card with no trace
+- fix(plugins): a histogram row's `value`/`note` must be strings, and an over-long bucket series keeps its newest buckets rather than its oldest
+- fix(ui): the per-account histogram row announces its 5h figure and reset to screen readers, not just the account name
+
 ### Chores
 - chore(antigravity-pool): refresh all pooled accounts every probe instead of four at a time
+- chore(ui): plugin settings use the shared `Button` and a real `<form>`; the heatmap and histogram share one intensity ramp
 
 ## v0.6.24
 

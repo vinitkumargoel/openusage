@@ -55,6 +55,13 @@ describe("UsageHistogram", () => {
   it("exposes the tooltip on the row", () => {
     render(<UsageHistogram rows={rows} />)
     expect(screen.getByTitle("weekly 56% left")).toBeInTheDocument()
-    expect(screen.getByLabelText("alien-agency: weekly 56% left")).toBeInTheDocument()
+  })
+
+  it("announces every visible column, not just the label", () => {
+    // An aria-label on the row replaces the name its children compose, so the
+    // 5h figure and the reset have to be in it or nobody hears them.
+    render(<UsageHistogram rows={rows} />)
+    expect(screen.getByLabelText("alien-agency, 65%, 2h 58m, weekly 56% left")).toBeInTheDocument()
+    expect(screen.getByLabelText("carbon-creek, cooling, 41m")).toBeInTheDocument()
   })
 })

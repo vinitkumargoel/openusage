@@ -487,14 +487,27 @@ fn write_plugin_config_file(
     let text = serde_json::to_string_pretty(&serde_json::Value::Object(map.clone()))
         .map_err(|err| format!("serialize config: {}", err))?;
     let tmp = path.with_extension("json.tmp");
-    std::fs::write(&tmp, text).map_err(|err| format!("write config: {}", err))?;
+    // Created 0600 up front: the file holds secrets, so it must never exist at
+    // the default 0644, not even for the instant before a chmod.
+    let mut opts = std::fs::OpenOptions::new();
+    opts.write(true).create(true).truncate(true);
     #[cfg(unix)]
     {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o600))
-            .map_err(|err| format!("chmod config: {}", err))?;
+        use std::os::unix::fs::OpenOptionsExt;
+        opts.mode(0o600);
     }
-    std::fs::rename(&tmp, path).map_err(|err| format!("replace config: {}", err))?;
+    let write = opts.open(&tmp).and_then(|mut file| {
+        use std::io::Write;
+        file.write_all(text.as_bytes())
+    });
+    if let Err(err) = write {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(format!("write config: {}", err));
+    }
+    if let Err(err) = std::fs::rename(&tmp, path) {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(format!("replace config: {}", err));
+    }
     Ok(())
 }
 

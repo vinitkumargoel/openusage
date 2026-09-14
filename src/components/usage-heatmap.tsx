@@ -1,6 +1,6 @@
 import { memo, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { useDarkMode } from "@/hooks/use-dark-mode"
-import { adjustBrandColor } from "@/lib/color"
+import { adjustBrandColor, FALLBACK_BASE_COLOR, LEVEL_MIX_DARK, LEVEL_MIX_LIGHT } from "@/lib/color"
 import { formatCountNumber, formatDayKey } from "@/lib/utils"
 import { useAppPreferencesStore } from "@/stores/app-preferences-store"
 import type { HeatmapDay, ProgressFormat } from "@/lib/plugin-types"
@@ -13,14 +13,6 @@ const PITCH_PX = CELL_PX + GAP_PX
 
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 const DOW_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
-
-// Brand-color mix percentages per intensity level (1-4), tuned per theme so
-// level 1 stays visible against the panel background in both modes.
-const LEVEL_MIX_LIGHT = [25, 50, 75, 100]
-const LEVEL_MIX_DARK = [30, 55, 80, 100]
-
-// Neutral base when a provider has no brand color; readable in both themes.
-const FALLBACK_BASE_COLOR = "#6b7280"
 
 // Tooltip sits this far above the pointer, and never closer than this to a
 // window edge.

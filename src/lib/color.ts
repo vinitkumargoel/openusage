@@ -1,3 +1,12 @@
+// Brand-color mix percentages per intensity level (1-4), tuned per theme so
+// level 1 stays visible against the panel background in both modes. Shared by
+// the heatmap and the histogram, which must read as one system.
+export const LEVEL_MIX_LIGHT = [25, 50, 75, 100]
+export const LEVEL_MIX_DARK = [30, 55, 80, 100]
+
+// Neutral base when a provider has no brand color; readable in both themes.
+export const FALLBACK_BASE_COLOR = "#6b7280"
+
 function sRGBtoLinear(c: number) {
   return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
 }

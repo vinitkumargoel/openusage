@@ -122,7 +122,7 @@
         cfg.baseUrl = order[o]
         break
       } catch (e) {
-        ctx.host.log.info("relay unreachable at " + order[o] + ", trying next")
+        ctx.host.log.info("relay unreachable at " + order[o] + ", trying next: " + String(e))
       }
     }
     if (!resp) throw "Cannot reach CLIProxy at " + cfg.baseUrls.join(", ")
@@ -232,7 +232,7 @@
         timeoutMs: QUOTA_TIMEOUT_MS,
       })
     } catch (e) {
-      return { ok: false, error: "request failed" }
+      return { ok: false, error: "request failed: " + String(e) }
     }
     if (resp.status < 200 || resp.status >= 300) {
       return { ok: false, error: statusError(ctx, "relay", resp.status, resp.bodyText) }
@@ -255,8 +255,14 @@
 
   function loadState(ctx) {
     var path = statePath(ctx)
-    var stored = ctx.host.fs.exists(path) ? ctx.util.tryParseJson(ctx.host.fs.readText(path)) : null
-    if (!stored || typeof stored !== "object") return { accounts: {}, counters: {}, days: {} }
+    var present = ctx.host.fs.exists(path)
+    var stored = present ? ctx.util.tryParseJson(ctx.host.fs.readText(path)) : null
+    if (!stored || typeof stored !== "object") {
+      // Starting from scratch loses the heatmap's history, so say so rather than
+      // let 400 days vanish quietly after a crash truncated the file.
+      if (present) ctx.host.log.error("pool-state.json is unreadable; request history restarts from today")
+      return { accounts: {}, counters: {}, days: {} }
+    }
     return {
       accounts: stored.accounts && typeof stored.accounts === "object" ? stored.accounts : {},
       counters: stored.counters && typeof stored.counters === "object" ? stored.counters : {},
@@ -308,7 +314,7 @@
     var cutoffKey = dayKey(new Date(now.getTime() - RETENTION_DAYS * 24 * HOUR_MS))
     var keys = Object.keys(state.days)
     for (var k = 0; k < keys.length; k++) {
-      if (keys[k] < cutoffKey) delete state.days[keys[k]]
+      if (keys[k] <= cutoffKey) delete state.days[keys[k]]
     }
   }
 
@@ -320,9 +326,14 @@
       var age = cached && typeof cached.fetchedAtMs === "number"
         ? nowMs - cached.fetchedAtMs
         : Number.MAX_SAFE_INTEGER
-      if (age >= ACCOUNT_TTL_MS) due.push({ account: accounts[i], age: age })
+      if (age < ACCOUNT_TTL_MS) continue
+      var cooling = accounts[i].cooling && accounts[i].cooling.untilMs > nowMs ? 1 : 0
+      due.push({ account: accounts[i], age: age, cooling: cooling })
     }
+    // Live accounts first: they are the ones the mean is built from, so on a cold
+    // start the budget must not be spent on parked ones.
     due.sort(function (a, b) {
+      if (a.cooling !== b.cooling) return a.cooling - b.cooling
       if (a.age !== b.age) return b.age - a.age
       return a.account.authIndex < b.account.authIndex ? -1 : 1
     })
@@ -361,14 +372,18 @@
     return count > 0 ? sum / count : null
   }
 
-  // The earliest reset is when the pool's capacity next changes.
-  function earliestReset(entries, key) {
+  // The earliest reset still ahead of us is when the pool's capacity next
+  // changes. A cached reading whose account stopped answering keeps its old
+  // reset instant, and that instant goes stale — counting down to it would show
+  // a countdown that already expired.
+  function earliestReset(entries, key, nowMs) {
     var best = null
     for (var i = 0; i < entries.length; i++) {
       var iso = entries[i][key]
       if (typeof iso !== "string") continue
       var ms = Date.parse(iso)
       if (!Number.isFinite(ms)) continue
+      if (ms <= nowMs) continue
       if (best === null || ms < best.ms) best = { ms: ms, iso: iso }
     }
     return best
@@ -378,21 +393,29 @@
   // weekly windows collapsed onto two instants 3.5 days apart, so two rows say
   // what nine would have — and they say when capacity actually comes back.
   function cohortsOf(entries) {
-    var byHour = {}
+    var points = []
     for (var i = 0; i < entries.length; i++) {
       var entry = entries[i]
       if (typeof entry.gemWeek !== "number") continue
       var ms = typeof entry.gemWeekReset === "string" ? Date.parse(entry.gemWeekReset) : NaN
       if (!Number.isFinite(ms)) continue
-      var key = String(Math.round(ms / HOUR_MS))
-      if (!byHour[key]) byHour[key] = { resetMs: ms, sum: 0, count: 0 }
-      byHour[key].sum += entry.gemWeek
-      byHour[key].count += 1
+      points.push({ ms: ms, value: entry.gemWeek })
     }
+    points.sort(function (a, b) { return a.ms - b.ms })
+    // Grouped by how far apart the resets are, not by which side of the hour
+    // they round to: two resets 20 seconds either side of :30 are one cohort.
     var cohorts = []
-    var keys = Object.keys(byHour)
-    for (var k = 0; k < keys.length; k++) cohorts.push(byHour[keys[k]])
-    cohorts.sort(function (a, b) { return a.resetMs - b.resetMs })
+    var current = null
+    for (var p = 0; p < points.length; p++) {
+      if (current && points[p].ms - current.lastMs <= HOUR_MS) {
+        current.sum += points[p].value
+        current.count += 1
+        current.lastMs = points[p].ms
+        continue
+      }
+      current = { resetMs: points[p].ms, lastMs: points[p].ms, sum: points[p].value, count: 1 }
+      cohorts.push(current)
+    }
     return cohorts
   }
 
@@ -452,7 +475,10 @@
 
   // --- Per-account rows ---
 
-  function relativeOrNow(ctx, ms, nowMs) {
+  // Returns null for an instant the relay did not give us in a shape we can
+  // parse — rendering that as "now" would claim the window refills this second.
+  function relativeReset(ctx, ms, nowMs) {
+    if (!Number.isFinite(ms)) return null
     return ctx.fmt.resetIn(Math.max(0, (ms - nowMs) / 1000)) || "now"
   }
 
@@ -468,14 +494,41 @@
     return 2
   }
 
-  function accountRow(ctx, account, cached, aliases, nowMs) {
+  // The x-axis is shared across rows, so every row has to be the same span of
+  // relay time. The longest bucket series is the grid; a quieter account whose
+  // series starts later is placed on it by bucket label and zero-filled before.
+  function bucketGrid(accounts) {
+    var grid = []
+    for (var i = 0; i < accounts.length; i++) {
+      if (accounts[i].buckets.length > grid.length) grid = accounts[i].buckets
+    }
+    var slots = []
+    var index = {}
+    for (var g = 0; g < grid.length; g++) {
+      slots.push(grid[g].time)
+      index[grid[g].time] = g
+    }
+    return { slots: slots, index: index }
+  }
+
+  function accountRow(ctx, account, cached, aliases, nowMs, grid) {
     var counts = []
+    for (var g = 0; g < grid.slots.length; g++) counts.push(0)
     var requests = 0
     var failed = 0
+    var offGrid = 0
     for (var i = 0; i < account.buckets.length; i++) {
-      counts.push(account.buckets[i].success)
+      var slot = grid.index[account.buckets[i].time]
+      if (typeof slot === "number") counts[slot] += account.buckets[i].success
+      else offGrid += 1
       requests += account.buckets[i].success
       failed += account.buckets[i].failed
+    }
+    if (offGrid > 0) {
+      ctx.host.log.warn(
+        "account " + account.authIndex.slice(0, 6) + " has " + offGrid +
+        " request buckets outside the pool's time grid; they are not drawn"
+      )
     }
     var row = {
       label: accountName(account, aliases),
@@ -487,7 +540,7 @@
     var cooling = account.cooling && account.cooling.untilMs > nowMs ? account.cooling : null
     if (cooling) {
       row.value = "cooling"
-      row.note = relativeOrNow(ctx, cooling.untilMs, nowMs)
+      row.note = relativeReset(ctx, cooling.untilMs, nowMs) || "—"
       row.color = DANGER_COLOR
       tips.push("relay " + cooling.reason + " · retries in " + row.note)
     } else if (account.offline) {
@@ -499,23 +552,25 @@
       row.note = "sampling"
     } else if (typeof cached.gemFive !== "number") {
       row.value = "wk only"
-      row.note = typeof cached.gemWeekReset === "string"
-        ? "wk " + relativeOrNow(ctx, Date.parse(cached.gemWeekReset), nowMs)
-        : "—"
+      var weekAt = typeof cached.gemWeekReset === "string"
+        ? relativeReset(ctx, Date.parse(cached.gemWeekReset), nowMs)
+        : null
+      row.note = weekAt ? "wk " + weekAt : "—"
       tips.push("no 5h bucket (free tier)")
     } else {
       row.value = pct(cached.gemFive) + "%"
-      row.note = typeof cached.gemFiveReset === "string"
-        ? relativeOrNow(ctx, Date.parse(cached.gemFiveReset), nowMs)
-        : "idle"
+      row.note = (typeof cached.gemFiveReset === "string"
+        ? relativeReset(ctx, Date.parse(cached.gemFiveReset), nowMs)
+        : null) || "idle"
       if (cached.gemFive < 0.1) row.color = DANGER_COLOR
       else if (cached.gemFive < 0.25) row.color = WARN_COLOR
     }
     if (cached && typeof cached.gemWeek === "number") {
       var weekly = pct(cached.gemWeek) + "% weekly left"
-      if (typeof cached.gemWeekReset === "string") {
-        weekly += " · resets in " + relativeOrNow(ctx, Date.parse(cached.gemWeekReset), nowMs)
-      }
+      var weeklyAt = typeof cached.gemWeekReset === "string"
+        ? relativeReset(ctx, Date.parse(cached.gemWeekReset), nowMs)
+        : null
+      if (weeklyAt) weekly += " · resets in " + weeklyAt
       tips.push(weekly)
     }
     if (account.buckets.length > 0) {
@@ -536,19 +591,15 @@
       if (a.rank !== b.rank) return a.rank - b.rank
       return a.account.authIndex < b.account.authIndex ? -1 : 1
     })
+    var grid = bucketGrid(accounts)
     var rows = []
-    var first = null
-    var last = null
     for (var r = 0; r < ranked.length; r++) {
-      rows.push(accountRow(ctx, ranked[r].account, ranked[r].cached, aliases, nowMs))
-      var buckets = ranked[r].account.buckets
-      if (buckets.length > 0) {
-        if (!first) first = buckets[0].time
-        last = buckets[buckets.length - 1].time
-      }
+      rows.push(accountRow(ctx, ranked[r].account, ranked[r].cached, aliases, nowMs, grid))
     }
     var axis = "no request history from the relay"
-    if (first && last) {
+    if (grid.slots.length > 0) {
+      var first = grid.slots[0]
+      var last = grid.slots[grid.slots.length - 1]
       var from = first.split("-")[0]
       var to = last.split("-")[1] || last.split("-")[0]
       axis = from + " → " + to + " relay time · 10-min buckets"
@@ -581,11 +632,11 @@
 
     var gemWeek = meanOf(entries, "gemWeek")
     if (gemWeek !== null) {
-      lines.push(progressLine(ctx, "Gemini weekly", gemWeek, earliestReset(entries, "gemWeekReset"), WEEK_MS))
+      lines.push(progressLine(ctx, "Gemini weekly", gemWeek, earliestReset(entries, "gemWeekReset", now.getTime()), WEEK_MS))
     }
     var gemFive = meanOf(entries, "gemFive")
     if (gemFive !== null) {
-      lines.push(progressLine(ctx, "Gemini 5h", gemFive, earliestReset(entries, "gemFiveReset"), FIVE_HOUR_MS))
+      lines.push(progressLine(ctx, "Gemini 5h", gemFive, earliestReset(entries, "gemFiveReset", now.getTime()), FIVE_HOUR_MS))
     }
 
     var live = 0
@@ -640,6 +691,7 @@
   // --- Probe ---
 
   function probe(ctx) {
+    var startedMs = Date.now()
     var cfg = loadConfig(ctx)
     var state = loadState(ctx)
     var accounts = fetchAccounts(ctx, cfg, state.baseUrl)
@@ -650,7 +702,6 @@
     pruneAccounts(state, accounts)
 
     var due = selectDue(accounts, state, now.getTime())
-    var startedMs = Date.now()
     var failures = 0
     var lastError = null
     for (var i = 0; i < due.length; i++) {

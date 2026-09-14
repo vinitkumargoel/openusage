@@ -83,8 +83,11 @@ pub fn load_plugins_from_dir(plugins_dir: &std::path::Path) -> Vec<LoadedPlugin>
         if !manifest_path.exists() {
             continue;
         }
-        if let Ok(p) = load_single_plugin(&path) {
-            plugins.push(p);
+        match load_single_plugin(&path) {
+            Ok(p) => plugins.push(p),
+            // Loudly: a malformed plugin.json otherwise makes the card vanish
+            // from the app with no trace of why.
+            Err(err) => log::error!("failed to load plugin at {}: {}", path.display(), err),
         }
     }
 

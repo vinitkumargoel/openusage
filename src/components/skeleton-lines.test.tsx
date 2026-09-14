@@ -36,6 +36,13 @@ describe("SkeletonLines", () => {
     expect(textGroup).toContainElement(leftLabel.parentElement)
   })
 
+  it("renders a histogram placeholder", () => {
+    const line = { type: "histogram", label: "Accounts · 5h" } as ManifestLine
+    const { container } = render(<SkeletonLine line={line} />)
+    expect(screen.getByText("Accounts · 5h")).toBeInTheDocument()
+    expect(container.querySelector(".h-\\[120px\\]")).toBeTruthy()
+  })
+
   it("falls back on unknown type", () => {
     const line = { type: "nope", label: "Fallback" } as unknown as ManifestLine
     render(<SkeletonLine line={line} />)

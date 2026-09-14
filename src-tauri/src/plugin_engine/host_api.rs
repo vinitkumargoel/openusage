@@ -328,6 +328,10 @@ fn redact_url(url: &str) -> String {
         "login",
     ];
 
+    // `http://user:pass@host/...` — credentials sit before the query string, so
+    // strip them first. A relay base URL is free-form user text.
+    let url = &strip_url_userinfo(url);
+
     if let Some(query_start) = url.find('?') {
         let (base, query) = url.split_at(query_start + 1);
         let redacted_params: Vec<String> = query
@@ -351,6 +355,26 @@ fn redact_url(url: &str) -> String {
         format!("{}{}", base, redacted_params.join("&"))
     } else {
         url.to_string()
+    }
+}
+
+/// Replace `//user:pass@` in a URL's authority with `//[REDACTED]@`.
+fn strip_url_userinfo(url: &str) -> String {
+    let Some(scheme_end) = url.find("//") else {
+        return url.to_string();
+    };
+    let authority_start = scheme_end + 2;
+    let authority_end = url[authority_start..]
+        .find(['/', '?', '#'])
+        .map(|i| authority_start + i)
+        .unwrap_or(url.len());
+    match url[authority_start..authority_end].rfind('@') {
+        Some(at) => format!(
+            "{}[REDACTED]@{}",
+            &url[..authority_start],
+            &url[authority_start + at + 1..]
+        ),
+        None => url.to_string(),
     }
 }
 
@@ -418,15 +442,20 @@ fn redact_body(body: &str) -> String {
         "email",
         "login",
         "analytics_tracking_id",
+        // CLIProxy relay: the management password a pooled plugin authenticates with.
+        "managementKey",
+        "management_key",
+        "management_password",
     ];
     for key in sensitive_keys {
         // Match "key": "value" or "key":"value"
-        let pattern = format!(r#""{}":\s*"([^"]+)""#, key);
+        // Case-insensitive: a relay that echoes request headers back sends
+        // "Authorization", not "authorization".
+        let pattern = format!(r#"(?i)"({})":\s*"([^"]+)""#, key);
         if let Ok(re) = regex_lite::Regex::new(&pattern) {
             result = re
                 .replace_all(&result, |caps: &regex_lite::Captures| {
-                    let value = &caps[1];
-                    format!("\"{}\": \"{}\"", key, redact_value(value))
+                    format!("\"{}\": \"{}\"", &caps[1], redact_value(&caps[2]))
                 })
                 .to_string();
         }
@@ -444,6 +473,14 @@ fn redact_body(body: &str) -> String {
 /// Lightweight redaction for log messages.
 pub(crate) fn redact_log_message(msg: &str) -> String {
     let mut result = msg.to_string();
+    // `http://user:pass@relay:8317` embedded in a message a plugin logged itself.
+    if let Ok(userinfo_re) = regex_lite::Regex::new(r#"(https?://)[^/\s"'@]*@"#) {
+        result = userinfo_re
+            .replace_all(&result, |caps: &regex_lite::Captures| {
+                format!("{}[REDACTED]@", &caps[1])
+            })
+            .to_string();
+    }
     if let Ok(jwt_re) = regex_lite::Regex::new(r"eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+")
     {
         result = jwt_re
@@ -3409,6 +3446,94 @@ mod tests {
             "non-sensitive counters should survive, got: {}",
             redacted
         );
+    }
+
+    #[test]
+    fn redact_body_redacts_management_key() {
+        for body in [
+            r#"{"baseUrl":"http://relay:8317","managementKey":"s3cret-relay-password"}"#,
+            r#"{"management_key":"s3cret-relay-password"}"#,
+            r#"{"MANAGEMENT_PASSWORD":"s3cret-relay-password"}"#,
+        ] {
+            let redacted = redact_body(body);
+            assert!(
+                !redacted.contains("s3cret-relay-password"),
+                "management key should be redacted, got: {}",
+                redacted
+            );
+        }
+    }
+
+    #[test]
+    fn redact_body_redacts_capitalised_authorization_header_echo() {
+        // CLIProxy's api-call takes a `header` object; an error body that echoes
+        // it back carries the real OAuth token under a capitalised key.
+        let body = r#"{"status_code":401,"header":{"Authorization":"Bearer ya29.a0AfB_realtokenvalue","Content-Type":"application/json"}}"#;
+        let redacted = redact_body(body);
+        assert!(
+            !redacted.contains("ya29.a0AfB_realtokenvalue"),
+            "capitalised Authorization should be redacted, got: {}",
+            redacted
+        );
+        assert!(
+            redacted.contains("\"Authorization\""),
+            "the key's original casing should survive, got: {}",
+            redacted
+        );
+        assert!(
+            redacted.contains("application/json"),
+            "non-sensitive headers should survive, got: {}",
+            redacted
+        );
+    }
+
+    #[test]
+    fn redact_url_redacts_basic_auth_userinfo() {
+        let redacted = redact_url("http://admin:hunter2@relay:8317/v0/management/auth-files");
+        assert_eq!(
+            redacted,
+            "http://[REDACTED]@relay:8317/v0/management/auth-files"
+        );
+        assert_eq!(
+            redact_url("http://relay:8317/v0/management/auth-files"),
+            "http://relay:8317/v0/management/auth-files",
+            "a URL without userinfo should pass through"
+        );
+    }
+
+    #[test]
+    fn redact_log_message_redacts_basic_auth_userinfo() {
+        let redacted = redact_log_message("relay unreachable at http://admin:hunter2@relay:8317");
+        assert!(
+            !redacted.contains("hunter2"),
+            "userinfo should be redacted, got: {}",
+            redacted
+        );
+        assert!(
+            redacted.contains("http://[REDACTED]@relay:8317"),
+            "host should survive, got: {}",
+            redacted
+        );
+    }
+
+    #[test]
+    fn http_request_headers_are_never_logged() {
+        // The management key travels as a header only. Nothing in inject_http may
+        // print the header map, so no log call can carry it.
+        let source = include_str!("host_api.rs");
+        let http_fn = source
+            .split("fn inject_http")
+            .nth(1)
+            .expect("inject_http should exist");
+        let body = &http_fn[..http_fn.find("\n}\n").unwrap_or(http_fn.len())];
+        for line in body.lines() {
+            let logs = line.contains("log::") || line.contains("println!");
+            assert!(
+                !(logs && line.contains("header")),
+                "inject_http must not log headers: {}",
+                line.trim()
+            );
+        }
     }
 
     #[test]

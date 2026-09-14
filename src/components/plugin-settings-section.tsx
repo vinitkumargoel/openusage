@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { invoke, isTauri } from "@tauri-apps/api/core"
-import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
 import type { PluginSettingField } from "@/lib/plugin-types"
 
 export type PluginSettingsTarget = {
@@ -75,7 +75,13 @@ function PluginSettingsForm({ plugin, onSaved }: { plugin: PluginSettingsTarget;
   }
 
   return (
-    <div className="space-y-2">
+    <form
+      className="space-y-2"
+      onSubmit={(event) => {
+        event.preventDefault()
+        void save()
+      }}
+    >
       <div className="text-sm font-medium">{plugin.name}</div>
       {plugin.settings.map((field) => {
         const isSecret = field.type === "secret"
@@ -99,22 +105,20 @@ function PluginSettingsForm({ plugin, onSaved }: { plugin: PluginSettingsTarget;
                   setValues((prev) => ({ ...prev, [field.key]: event.target.value }))
                   if (state !== "idle") setState("idle")
                 }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault()
-                    void save()
-                  }
-                }}
                 className={INPUT_CLASS}
               />
               {isSecret && (
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="xs"
+                  aria-pressed={!!reveal[field.key]}
+                  aria-controls={inputId}
                   onClick={() => setReveal((prev) => ({ ...prev, [field.key]: !prev[field.key] }))}
-                  className="text-xs text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
+                  className="flex-shrink-0 text-muted-foreground"
                 >
                   {reveal[field.key] ? "Hide" : "Show"}
-                </button>
+                </Button>
               )}
             </div>
             {field.help && <p className="text-[11px] text-muted-foreground">{field.help}</p>}
@@ -122,19 +126,14 @@ function PluginSettingsForm({ plugin, onSaved }: { plugin: PluginSettingsTarget;
         )
       })}
       <div className="flex items-center gap-2 h-6">
-        <button
-          type="button"
-          onClick={() => void save()}
+        <Button
+          type="submit"
+          size="xs"
+          variant={dirty ? "default" : "outline"}
           disabled={!dirty || state === "saving"}
-          className={cn(
-            "h-6 px-2.5 rounded-md text-xs font-medium border transition-colors",
-            dirty && state !== "saving"
-              ? "bg-primary text-primary-foreground border-primary hover:opacity-90"
-              : "text-muted-foreground border-border opacity-60 cursor-default"
-          )}
         >
           {state === "saving" ? "Saving…" : "Save"}
-        </button>
+        </Button>
         {state === "saved" && !dirty && <span className="text-xs text-muted-foreground">Saved · refreshing</span>}
         {state === "error" && (
           <span className="text-xs text-destructive truncate" title={message ?? undefined}>
@@ -142,7 +141,7 @@ function PluginSettingsForm({ plugin, onSaved }: { plugin: PluginSettingsTarget;
           </span>
         )}
       </div>
-    </div>
+    </form>
   )
 }
 

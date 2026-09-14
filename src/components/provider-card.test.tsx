@@ -103,6 +103,31 @@ describe("ProviderCard", () => {
     expect(cell.style.background).toContain("#DE7356")
   })
 
+  it("renders a histogram line with its rows, columns and axis", () => {
+    render(
+      <ProviderCard
+        name="Antigravity Pool"
+        displayMode="used"
+        brandColor="#4285F4"
+        lines={[
+          {
+            type: "histogram",
+            label: "Accounts · 5h",
+            columns: { buckets: "requests", value: "5h left", note: "resets" },
+            axis: "17:20 → 20:40 relay time · 10-min buckets",
+            rows: [
+              { label: "alien-agency", buckets: [0, 4, 1], value: "65%", note: "2h 58m" },
+            ],
+          },
+        ]}
+      />
+    )
+    expect(screen.getByText("Accounts · 5h")).toBeInTheDocument()
+    expect(screen.getByText("5h left")).toBeInTheDocument()
+    expect(screen.getByText("17:20 → 20:40 relay time · 10-min buckets")).toBeInTheDocument()
+    expect(screen.getByLabelText("alien-agency, 65%, 2h 58m")).toBeInTheDocument()
+  })
+
   it("shows loading spinner when retry is enabled", () => {
     const { container } = render(
       <ProviderCard

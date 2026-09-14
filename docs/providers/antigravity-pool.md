@@ -137,7 +137,7 @@ The reply wraps the upstream one; `body` is a JSON *string*:
 
 | Line | Scope | Meaning |
 |---|---|---|
-| Gemini weekly | overview | Mean remaining across live accounts; counts down to the **earliest** reset in the pool |
+| Gemini weekly | overview | Mean remaining across live accounts; counts down to the **earliest reset still ahead**. A cached reading whose account stopped answering keeps a reset instant that eventually passes, and a passed instant is skipped |
 | Gemini 5h | overview | Same, 5-hour window |
 | Pool | overview | Account count, with a subtitle when some are offline, cooling, unreachable, or not yet sampled |
 | Accounts · 5h | detail | One row per account: its last 3h20m of requests as a histogram, 5h left, and the 5h reset. Driest first |
@@ -152,11 +152,11 @@ Card badge reads `CLIProxy`, so a pooled card is never mistaken for a local one.
 
 Requests are handed out round-robin, so the pool behaves like one account holding the average of what its members have left. Measured on a 9-account relay: accounts sharing a reset instant reported `remainingFraction` identical to four decimal places.
 
-Disabled and unavailable accounts are left out of the mean and counted in the `Pool` line instead.
+Disabled and unavailable accounts are left out of the mean and counted in the `Pool` line instead. Free-tier accounts have no 5h bucket at all, so the Gemini 5h mean is over the accounts that have one — which can be fewer than the `Pool` count.
 
 ### Per-account rows
 
-Each row is one account. The bars are the relay's `recent_requests` buckets (10 minutes each, last ~3h20m), tinted by quartile across the whole block so a quiet account looks quiet next to a busy one. The two columns on the right are the 5h window: how much is left and when it resets. Hovering a row shows the weekly figure, its reset, and the request count for the span.
+Each row is one account. The bars are the relay's `recent_requests` buckets (10 minutes each, last ~3h20m), tinted by quartile across the whole block so a quiet account looks quiet next to a busy one. Every row is drawn on one shared time grid — the longest bucket series in the pool — so the same column is the same ten minutes on every row; an account whose history starts later is zero-filled before it. The two columns on the right are the 5h window: how much is left and when it resets. Hovering a row shows the weekly figure, its reset, and the request count for the span.
 
 | Row reads | Meaning |
 |---|---|
@@ -171,13 +171,13 @@ Rows are sorted driest first: cooling, then by 5h left (weekly stands in for fre
 
 ### Reset cohorts
 
-Weekly windows start whenever an account was first used, so a pool has several. Accounts resetting in the same hour are grouped into a cohort, and the rows only appear when there is more than one — a single cohort is already described by the weekly bar's own countdown.
+Weekly windows start whenever an account was first used, so a pool has several. Accounts whose resets are within an hour of each other are grouped into a cohort — measured as the gap between them, so two resets twenty seconds either side of the half hour are one cohort, not two — and the rows only appear when there is more than one — a single cohort is already described by the weekly bar's own countdown.
 
 This is the difference between "73% left" and knowing that six accounts refill tonight and the other three not until Friday.
 
 ### Fan-out
 
-One quota call per account, ~1.5s each, against a 30s probe deadline. Every probe refreshes the whole pool (up to **9** accounts) and stops fanning out after **16s**, merging anything left from disk; those accounts are picked up first on the next probe. A reading younger than **4 minutes** is not re-read, so a manual refresh right after a scheduled one does not hit Google twice. A refresh that fails keeps showing the cached reading.
+One quota call per account, ~1.5s each, against a 30s probe deadline. Live accounts are read before cooling ones, because only live accounts feed the pool mean. Every probe refreshes the whole pool (up to **9** accounts) and stops fanning out after **16s**, merging anything left from disk; those accounts are picked up first on the next probe. A reading younger than **4 minutes** is not re-read, so a manual refresh right after a scheduled one does not hit Google twice. A refresh that fails keeps showing the cached reading.
 
 ### The heatmap
 
@@ -185,7 +185,7 @@ Daily counts come from differencing CLIProxy's cumulative per-account `success` 
 
 Quota percentages are deliberately *not* the source: accounts share reset instants, so every reset would read as a pool-wide spike.
 
-Two increments are never counted: an account seen for the first time (its lifetime total would spike the day it joined) and a counter that went backwards (the relay restarted, so what is there now is today's). Because this runs before the quota fan-out, history keeps accruing even while the quota API is down.
+An account seen for the first time contributes nothing, because its lifetime total would spike the day it joined. A counter that went backwards means the relay restarted, so the increment is meaningless and the counter's current value is taken as today's instead. Because this runs before the quota fan-out, history keeps accruing even while the quota API is down.
 
 ## Plugin Strategy
 
