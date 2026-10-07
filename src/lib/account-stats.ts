@@ -55,19 +55,21 @@ export function elapsedPct(bar: AccountBar, now: number): number | null {
 const BURN_MIN_ELAPSED_MS = 10 * 60 * 1000
 
 /** Where the 5h window lands at this rate: used ÷ share of window gone. */
-export function burn(bar: AccountBar, now: number): { text: string; tone: Tone } {
-  if (bar.used <= 0) return { text: "idle", tone: "muted" }
+export function burn(bar: AccountBar, now: number): { text: string; short: string; tone: Tone } {
+  if (bar.used <= 0) return { text: "idle", short: "idle", tone: "muted" }
   const gone = elapsedPct(bar, now)
   if (gone === null || !bar.periodMs || (gone / 100) * bar.periodMs < BURN_MIN_ELAPSED_MS) {
-    return { text: "window just started", tone: "muted" }
+    return { text: "window just started", short: "just started", tone: "muted" }
   }
   const projected = (bar.used / gone) * 100
   if (projected <= 100) {
-    return { text: `on pace for ${Math.round(projected)}%`, tone: projected >= 70 ? "warn" : "muted" }
+    const pct = Math.round(projected)
+    return { text: `on pace for ${pct}%`, short: `pace ${pct}%`, tone: projected >= 70 ? "warn" : "muted" }
   }
   const elapsedMs = (gone / 100) * bar.periodMs
   const hitInMs = (elapsedMs * 100) / bar.used - elapsedMs
-  return { text: `hits limit in ~${formatCompactDuration(hitInMs) ?? "<1m"}`, tone: "bad" }
+  const hit = formatCompactDuration(hitInMs) ?? "<1m"
+  return { text: `hits limit in ~${hit}`, short: `limit ~${hit}`, tone: "bad" }
 }
 
 /** Weekly use against an even spend. Positive `delta` = under pace. */

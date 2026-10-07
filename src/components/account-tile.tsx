@@ -56,43 +56,45 @@ export const AccountTile = forwardRef<HTMLDivElement, TileProps>(function Accoun
         }
       }}
       className={cn(
-        "flex flex-col gap-1.5 rounded-xl border border-transparent bg-muted/50 p-2 pb-1.5 cursor-pointer transition-colors hover:bg-muted hover:border-border focus-visible:outline-2 focus-visible:outline-[var(--acc)]",
+        "flex min-w-0 flex-col gap-1.5 rounded-xl border border-transparent bg-muted/50 p-2 pb-1.5 cursor-pointer transition-colors hover:bg-muted hover:border-border focus-visible:outline-2 focus-visible:outline-[var(--acc)]",
         isBest && "border-green-500/40",
         row.flag === "limit" && "border-red-500/40",
         row.flag === "expired" && "opacity-60"
       )}
     >
-      <div className="flex items-center gap-1.5 min-w-0">
-        <Slot row={row} />
+      <div className="flex items-center gap-1 min-w-0">
         <span className="flex-1 min-w-0 truncate text-[12.5px] font-semibold" title={row.detail}>{row.name}</span>
         <AccountTag row={row} isBest={isBest} />
       </div>
-      <div className="flex items-center gap-2">
-        <AccountRing row={row} />
-        <div className="min-w-0 text-[10.5px] leading-[1.55] text-muted-foreground tabular-nums">
+      <div className="flex items-center gap-2 min-w-0">
+        <AccountRing row={row} size={46} />
+        <div className="min-w-0 whitespace-nowrap text-[10.5px] leading-[1.55] text-muted-foreground tabular-nums">
           {five && (
             <div>
-              5h <b className="font-semibold text-foreground">{Math.round(five.used)}%</b> · {until(now, five.resetsAt)}
+              5h <b className="font-semibold text-foreground">{Math.round(five.used)}%</b>
             </div>
           )}
           {week ? (
             <div>
-              7d <b className="font-semibold text-foreground">{Math.round(week.used)}%</b> · {until(now, week.resetsAt)}
+              7d <b className="font-semibold text-foreground">{Math.round(week.used)}%</b>
             </div>
           ) : (
-            <div className="opacity-60">no 7d limit</div>
+            <div className="opacity-60">no 7d</div>
           )}
-          <div className={row.flag === "expired" ? "text-red-500" : b ? TONE_TEXT[b.tone] : ""}>
-            {row.flag === "expired" ? "login expired" : b?.text}
+          <div className={cn("truncate", row.flag === "expired" ? "text-red-500" : b ? TONE_TEXT[b.tone] : "")} title={b?.text}>
+            {row.flag === "expired" ? "expired" : b?.short}
           </div>
         </div>
       </div>
-      <div className="flex items-center justify-between gap-1.5 border-t pt-1.5 text-[10.5px] text-muted-foreground">
-        <span className="truncate">{domainOf(row)}</span>
+      <div className="flex items-center justify-between gap-1 border-t pt-1.5 text-[10.5px] text-muted-foreground tabular-nums">
+        <span className="truncate" title={five?.resetsAt ? `#${row.id} · 5h resets in ${until(now, five.resetsAt)}` : `#${row.id}`}>
+          #{row.id}
+          {five?.resetsAt && <> · ↻ {until(now, five.resetsAt)}</>}
+        </span>
         {!row.active && (
           <button
             type="button"
-            className="rounded-md px-1.5 py-0.5 -my-0.5 -mr-1 text-[11px] font-semibold text-[var(--acc)] hover:bg-[var(--acc)]/10 disabled:opacity-40"
+            className="flex-none rounded-md px-1 py-0.5 -my-0.5 text-[11px] font-semibold text-[var(--acc)] hover:bg-[var(--acc)]/10 disabled:opacity-40"
             disabled={pending !== null}
             aria-label={`Switch to ${row.name}`}
             onClick={(e) => {
@@ -124,37 +126,37 @@ export function ActiveHero({ row, now, onOpen }: { row: AccountRow; now: number;
       className="mb-2.5 cursor-pointer rounded-2xl border bg-[linear-gradient(180deg,color-mix(in_srgb,var(--acc)_12%,transparent),transparent_140%)] p-3"
     >
       <div className="flex items-center gap-2 min-w-0">
-        <Slot row={row} size={26} />
+        <Slot row={row} size={24} />
         <div className="min-w-0 flex-1">
           <div className="truncate text-[15px] font-semibold">{row.name}</div>
           <div className="text-[11px] text-muted-foreground truncate">{domainOf(row)} · slot #{row.id}</div>
         </div>
         <AccountTag row={row} isBest={false} />
       </div>
-      <div className="mt-2.5 grid grid-cols-[80px_1fr] items-center gap-3">
-        <AccountRing row={row} size={80} />
+      <div className="mt-2.5 grid grid-cols-[64px_minmax(0,1fr)] items-center gap-2.5">
+        <AccountRing row={row} size={64} />
         <div className="min-w-0 text-[11px] text-muted-foreground tabular-nums">
           {five && (
             <>
               <div className="mb-1 flex justify-between gap-2">
-                <span>Session · <b className="text-foreground">{Math.round(five.used)}%</b></span>
-                {five.resetsAt && <span>resets <b className="text-foreground">{time.format(Date.parse(five.resetsAt))}</b> · {until(now, five.resetsAt)}</span>}
+                <span className="whitespace-nowrap">Session <b className="text-foreground">{Math.round(five.used)}%</b></span>
+                {five.resetsAt && <span className="whitespace-nowrap" title={`Resets ${time.format(Date.parse(five.resetsAt))}`}>↻ {until(now, five.resetsAt)}</span>}
               </div>
               <WindowBar used={five.used} elapsed={elapsedPct(five, now)} label="5 hour window" />
-              {b && <div className={cn("mt-0.5 text-[10.5px]", TONE_TEXT[b.tone])}>{b.text}</div>}
+              {b && <div className={cn("mt-0.5 truncate text-[10.5px]", TONE_TEXT[b.tone])}>{b.text}</div>}
             </>
           )}
           {week ? (
             <>
               <div className="mt-2 mb-1 flex justify-between gap-2">
-                <span>Weekly · <b className="text-foreground">{Math.round(week.used)}%</b></span>
-                <span>{until(now, week.resetsAt)}</span>
+                <span className="whitespace-nowrap">Weekly <b className="text-foreground">{Math.round(week.used)}%</b></span>
+                <span className="whitespace-nowrap">↻ {until(now, week.resetsAt)}</span>
               </div>
               <WindowBar used={week.used} elapsed={elapsedPct(week, now)} marker={pace?.expected} label="7 day window" />
               {pace && <div className={cn("mt-0.5 text-[10.5px]", pace.delta >= 0 ? "text-green-500" : "text-red-500")}>{pace.text}</div>}
             </>
           ) : (
-            <div className="mt-2 text-[10.5px] opacity-60">No weekly limit on this plan</div>
+            <div className="mt-2 text-[10.5px] opacity-60">No weekly limit</div>
           )}
         </div>
       </div>

@@ -43,7 +43,7 @@ describe("AccountList", () => {
     expect(screen.getByText("best")).toBeInTheDocument()
     expect(screen.queryByRole("button", { name: "Switch to personal" })).toBeNull()
     expect(screen.getByRole("button", { name: "Switch to side" })).toBeInTheDocument()
-    expect(screen.getByText("ready to switch").previousElementSibling).toHaveTextContent("1/2")
+    expect(screen.getByText("ready").previousElementSibling).toHaveTextContent("1/2")
   })
 
   it("switches through the app command, refreshes, and offers undo", async () => {

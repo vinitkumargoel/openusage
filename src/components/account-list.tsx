@@ -125,19 +125,19 @@ export function AccountList({ providerId, rows, now, accent = "#DE7356", onSwitc
 
       {others.length > 0 && (
         <div className="mb-2.5 grid grid-cols-3 gap-1.5 tabular-nums">
-          <Kpi value={<>{ready}<small className="text-[11px] font-medium text-muted-foreground">/{others.length}</small></>} label="ready to switch" valueClass={ready ? "text-green-500" : "text-red-500"}>
+          <Kpi value={<>{ready}<small className="text-[11px] font-medium text-muted-foreground">/{others.length}</small></>} label="ready" valueClass={ready ? "text-green-500" : "text-red-500"}>
             {others.map((r) => (
               <i key={r.id} title={`#${r.id} ${r.name}`} className={`h-1 flex-1 rounded-sm ${r.flag ? "bg-red-500" : TONE_BG[usedTone(100 - headroom(r))]}`} style={{ opacity: r.flag ? 1 : 0.35 + headroom(r) / 150 }} />
             ))}
           </Kpi>
-          <Kpi value={<>{poolFree.toFixed(1)}<small className="text-[11px] font-medium text-muted-foreground">/{rows.length}</small></>} label="5h sessions free">
+          <Kpi value={<>{poolFree.toFixed(1)}<small className="text-[11px] font-medium text-muted-foreground">/{rows.length}</small></>} label="5h free">
             {rows.map((r) => {
               const used = barOf(r, "5h")?.used ?? 100
               return <i key={r.id} className="h-1 flex-1 rounded-sm bg-muted overflow-hidden"><i className={`block h-full ${TONE_BG[usedTone(used)]}`} style={{ width: `${100 - used}%` }} /></i>
             })}
           </Kpi>
           {nextReset && (
-            <Kpi value={until(now, nextReset.bar!.resetsAt)} label={`next reset · #${nextReset.r.id} ${nextReset.r.name}`}>
+            <Kpi value={until(now, nextReset.bar!.resetsAt)} label="next reset" title={`#${nextReset.r.id} ${nextReset.r.name}`}>
               <i className="h-1 flex-1 rounded-sm bg-muted overflow-hidden"><i className="block h-full bg-[var(--acc)]" style={{ width: `${elapsedPct(nextReset.bar!, now) ?? 0}%` }} /></i>
             </Kpi>
           )}
@@ -146,14 +146,14 @@ export function AccountList({ providerId, rows, now, accent = "#DE7356", onSwitc
 
       {others.length > 0 && (
         <div className="mb-2 flex items-center gap-1.5">
-          <div className="flex gap-1 overflow-x-auto [scrollbar-width:none]">
+          <div className="flex min-w-0 gap-1 overflow-x-auto [scrollbar-width:none]">
             {(Object.keys(FILTERS) as FilterKey[]).map((k) => (
               <button
                 key={k}
                 type="button"
                 onClick={() => setFilter(k)}
                 aria-pressed={filter === k}
-                className={`whitespace-nowrap rounded-full border px-2 py-px text-[11.5px] ${filter === k ? "border-foreground bg-foreground text-background" : "text-muted-foreground"}`}
+                className={`whitespace-nowrap rounded-full border px-1.5 py-px text-[11px] ${filter === k ? "border-foreground bg-foreground text-background" : "text-muted-foreground"}`}
               >
                 {FILTERS[k].label}
                 <span className="ml-1 opacity-60">{rows.filter(FILTERS[k].test).length}</span>
@@ -162,11 +162,12 @@ export function AccountList({ providerId, rows, now, accent = "#DE7356", onSwitc
           </div>
           <button
             type="button"
-            className="ml-auto flex items-center gap-1 whitespace-nowrap rounded-md px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground"
+            title={`Sort: ${SORTS[sort].label}`}
+            className="ml-auto flex flex-none items-center gap-1 whitespace-nowrap rounded-md p-1 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground"
             onClick={() => setSort(sortKeys[(sortKeys.indexOf(sort) + 1) % sortKeys.length])}
             aria-label={`Sort: ${SORTS[sort].label}`}
           >
-            {SORTS[sort].label} <ArrowUpDown className="size-3" />
+            <ArrowUpDown className="size-3.5" />
           </button>
         </div>
       )}
@@ -213,10 +214,10 @@ export function AccountList({ providerId, rows, now, accent = "#DE7356", onSwitc
           {best ? (
             <>
               <Slot row={best} size={24} />
-              <div className="min-w-0 flex-1 text-[11.5px] leading-tight text-muted-foreground">
-                Best next: <b className="text-foreground">{best.name}</b>
+              <div className="min-w-0 flex-1 truncate text-[11.5px] leading-tight text-muted-foreground">
+                Best: <b className="text-foreground">{best.name}</b>
                 <br />
-                {headroom(best)}% left{barOf(best, "5h")?.resetsAt ? ` · 5h resets ${until(now, barOf(best, "5h")!.resetsAt)}` : ""}
+                {headroom(best)}% left
               </div>
               <Button size="sm" className="bg-[var(--acc)] text-white hover:bg-[var(--acc)]/90" disabled={pending !== null} onClick={() => void switchTo(best.id)}>
                 {pending === best.id ? <Loader2 className="animate-spin" /> : "Switch to best"}
@@ -237,11 +238,11 @@ export function AccountList({ providerId, rows, now, accent = "#DE7356", onSwitc
   )
 }
 
-function Kpi({ value, label, valueClass, children }: { value: React.ReactNode; label: string; valueClass?: string; children: React.ReactNode }) {
+function Kpi({ value, label, title, valueClass, children }: { value: React.ReactNode; label: string; title?: string; valueClass?: string; children: React.ReactNode }) {
   return (
-    <div className="min-w-0 rounded-xl bg-muted/50 px-2 pt-1.5 pb-1.5">
-      <div className={`whitespace-nowrap text-[17px] font-semibold tracking-tight ${valueClass ?? ""}`}>{value}</div>
-      <div className="truncate text-[10.5px] text-muted-foreground" title={label}>{label}</div>
+    <div className="min-w-0 rounded-xl bg-muted/50 px-2 pt-1.5 pb-1.5" title={title}>
+      <div className={`whitespace-nowrap text-[15px] font-semibold tracking-tight ${valueClass ?? ""}`}>{value}</div>
+      <div className="truncate text-[10.5px] text-muted-foreground">{label}</div>
       <div className="mt-1 flex gap-[3px]">{children}</div>
     </div>
   )

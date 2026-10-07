@@ -35,7 +35,7 @@ describe("account-stats", () => {
     expect(burn(row("1", 0).bars[0], NOW).text).toBe("idle")
     expect(burn(row("1", 30).bars[0], NOW).text).toBe("on pace for 50%")
     // 90% used with 60% of the window gone → limit after 66.7% → in 20m.
-    expect(burn(row("1", 90).bars[0], NOW)).toEqual({ text: "hits limit in ~20m", tone: "bad" })
+    expect(burn(row("1", 90).bars[0], NOW)).toEqual({ text: "hits limit in ~20m", short: "limit ~20m", tone: "bad" })
   })
 
   it("weekly pace uses cswap's expected percent", () => {
