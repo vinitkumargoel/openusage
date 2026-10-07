@@ -128,6 +128,28 @@ describe("ProviderCard", () => {
     expect(screen.getByLabelText("alien-agency, 65%, 2h 58m")).toBeInTheDocument()
   })
 
+  it("on the detail page, an accounts line replaces the overview lines that repeat it", () => {
+    const skeletonLines = [
+      { type: "text" as const, label: "Ready", scope: "overview" as const },
+      { type: "accounts" as const, label: "Accounts", scope: "detail" as const },
+    ]
+    const lines = [
+      { type: "text" as const, label: "Ready", value: "1 of 1 to switch to" },
+      { type: "accounts" as const, label: "Accounts", rows: [{ id: "1", name: "personal", active: true, bars: [] }] },
+    ]
+    const { unmount } = render(
+      <ProviderCard providerId="claude-accounts" name="Claude Accounts" displayMode="used" lines={lines} skeletonLines={skeletonLines} />
+    )
+    expect(screen.queryByText("1 of 1 to switch to")).toBeNull()
+    expect(screen.getByText("Accounts")).toBeInTheDocument()
+    unmount()
+
+    render(
+      <ProviderCard providerId="claude-accounts" name="Claude Accounts" displayMode="used" lines={lines} skeletonLines={skeletonLines} scopeFilter="overview" />
+    )
+    expect(screen.getByText("1 of 1 to switch to")).toBeInTheDocument()
+  })
+
   it("renders an accounts line with Switch buttons when it knows the provider", () => {
     const accounts = {
       type: "accounts" as const,

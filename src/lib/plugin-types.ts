@@ -37,7 +37,21 @@ export type MetricLine =
   | { type: "accounts"; label: string; rows: AccountRow[]; color?: string }
 
 /** A percent bar on an account row (5h, 7d). */
-export type AccountBar = { label: string; used: number; resetsAt?: string }
+export type AccountBar = {
+  label: string
+  used: number
+  resetsAt?: string
+  /** Window length, to work out how much of it has passed. */
+  periodMs?: number
+  /** Percent an even spend would have used by now. */
+  expected?: number
+  /** Whether the current rate lasts to reset, and when it runs out. */
+  lasts?: boolean
+  emptyAt?: string
+}
+
+/** A label/value pair shown in an account's detail sheet. */
+export type AccountStat = { label: string; value: string }
 
 /** One stored login. `id` is the slot the app passes to `switch_account`. */
 export type AccountRow = {
@@ -47,6 +61,7 @@ export type AccountRow = {
   active: boolean
   flag?: string
   bars: AccountBar[]
+  stats?: AccountStat[]
 }
 
 /** One labelled row of small bars, with a value and a note on the right. */

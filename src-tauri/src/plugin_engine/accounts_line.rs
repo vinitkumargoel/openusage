@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 
 const MAX_ROWS: usize = 50;
 const MAX_BARS: usize = 3;
+const MAX_STATS: usize = 8;
+const MAX_STAT_CHARS: usize = 120;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -16,6 +18,24 @@ pub struct AccountBar {
     pub used: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resets_at: Option<String>,
+    /// Window length; lets the UI work out how much of it has passed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub period_ms: Option<f64>,
+    /// Percent an even spend would have used by now.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected: Option<f64>,
+    /// Whether the current rate lasts until reset, and when it runs out.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lasts: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub empty_at: Option<String>,
+}
+
+/// A label/value pair shown in the account's detail sheet.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AccountStat {
+    pub label: String,
+    pub value: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -32,6 +52,14 @@ pub struct AccountRow {
     pub flag: Option<String>,
     #[serde(default)]
     pub bars: Vec<AccountBar>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stats: Vec<AccountStat>,
+}
+
+fn clip(s: &mut String) {
+    if s.chars().count() > MAX_STAT_CHARS {
+        *s = s.chars().take(MAX_STAT_CHARS).collect();
+    }
 }
 
 pub(crate) fn parse_rows_json(json: &str, line_idx: usize) -> Result<Vec<AccountRow>, String> {
@@ -54,6 +82,13 @@ pub(crate) fn parse_rows_json(json: &str, line_idx: usize) -> Result<Vec<Account
                 ));
             }
             bar.used = bar.used.clamp(0.0, 100.0);
+            bar.expected = bar.expected.filter(|e| e.is_finite()).map(|e| e.clamp(0.0, 100.0));
+            bar.period_ms = bar.period_ms.filter(|p| p.is_finite() && *p > 0.0);
+        }
+        row.stats.truncate(MAX_STATS);
+        for stat in &mut row.stats {
+            clip(&mut stat.label);
+            clip(&mut stat.value);
         }
     }
     Ok(rows)
@@ -96,6 +131,33 @@ mod tests {
         assert_eq!(rows[0].bars[0].used, 100.0);
         assert_eq!(rows[0].bars[1].used, 0.0);
         assert!(rows[0].active);
+    }
+
+    #[test]
+    fn keeps_pace_fields_and_drops_bad_ones() {
+        let rows = parse_rows_json(
+            r#"[{"id":"1","name":"a","bars":[
+                 {"label":"7d","used":40,"periodMs":604800000,"expected":130,"lasts":true,"emptyAt":"2026-10-11T14:23:19Z"},
+                 {"label":"5h","used":4,"periodMs":-1}],
+                 "stats":[{"label":"Fable","value":"0% used"}]}]"#,
+            0,
+        )
+        .unwrap();
+        let week = &rows[0].bars[0];
+        assert_eq!(week.expected, Some(100.0));
+        assert_eq!(week.period_ms, Some(604_800_000.0));
+        assert_eq!(week.lasts, Some(true));
+        assert_eq!(rows[0].bars[1].period_ms, None);
+        assert_eq!(rows[0].stats[0].value, "0% used");
+    }
+
+    #[test]
+    fn caps_stats() {
+        let stat = format!(r#"{{"label":"l","value":"{}"}}"#, "x".repeat(500));
+        let json = format!(r#"[{{"id":"1","name":"a","stats":[{}]}}]"#, vec![stat; 12].join(","));
+        let rows = parse_rows_json(&json, 0).unwrap();
+        assert_eq!(rows[0].stats.len(), 8);
+        assert_eq!(rows[0].stats[0].value.len(), 120);
     }
 
     #[test]

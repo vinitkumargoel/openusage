@@ -504,6 +504,9 @@ Only `claude-accounts` can switch: the button calls the app command
 - `rows[].id`: account slot number as a string (`"1"`–`"999"`). Anything else is rejected.
 - `rows[].bars[].used`: percent, clamped to 0–100.
 - `rows[].flag`: short warning tag (`limit`, `expired`, `off`).
+- `rows[].bars[].periodMs`: window length; with `resetsAt` the UI shows time gone and burn pace.
+- `rows[].bars[].expected` (percent an even spend would have used, clamped 0–100), `lasts`, `emptyAt`: weekly pace and projection.
+- `rows[].stats`: `{ label, value }` pairs for the detail sheet (max 8, 120 chars each).
 - Caps: 50 rows, 3 bars per row.
 
 ```javascript

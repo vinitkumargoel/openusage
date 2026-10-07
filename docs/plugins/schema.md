@@ -122,6 +122,7 @@ loading skeletons instantly while probes execute asynchronously.
 
 - `"overview"` - shown on both Overview tab and plugin detail pages
 - `"detail"` - shown only on plugin detail pages
+- A plugin with an `accounts` line: its detail page shows only the accounts line (it has its own summary), not the overview lines
 
 ### Primary Progress (Tray Icon)
 
@@ -197,7 +198,9 @@ type MetricLine =
       type: "accounts"; // claude-accounts only: rows get a Switch button
       label: string;
       rows: { id: string; name: string; detail?: string; active?: boolean; flag?: string;
-              bars: { label: string; used: number; resetsAt?: string }[] }[];
+              bars: { label: string; used: number; resetsAt?: string; periodMs?: number;
+                      expected?: number; lasts?: boolean; emptyAt?: string }[];
+              stats?: { label: string; value: string }[] }[];
       color?: string;
     }
 ```

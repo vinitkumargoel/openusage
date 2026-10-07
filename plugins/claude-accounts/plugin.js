@@ -47,14 +47,32 @@
   // Some plans have no 7d window; leave the bar out instead of showing 0%.
   function bars(usage) {
     var out = []
-    var wins = [["5h", usage.fiveHour], ["7d", usage.sevenDay]]
+    var wins = [["5h", usage.fiveHour, FIVE_HOUR_MS], ["7d", usage.sevenDay, WEEK_MS]]
     for (var i = 0; i < wins.length; i++) {
       var win = wins[i][1]
       if (windowPct(win) === null) continue
-      var b = { label: wins[i][0], used: win.pct }
+      var b = { label: wins[i][0], used: win.pct, periodMs: wins[i][2] }
       if (win.resetsAt) b.resetsAt = win.resetsAt
+      if (typeof win.expectedPct === "number") b.expected = win.expectedPct
+      if (typeof win.willLastToReset === "boolean") b.lasts = win.willLastToReset
+      if (win.projectedExhaustionAt) b.emptyAt = win.projectedExhaustionAt
       out.push(b)
     }
+    return out
+  }
+
+  // Extra facts for the detail sheet: model-scoped limits, org, odd status.
+  function stats(account, usage) {
+    var out = []
+    var scoped = Array.isArray(usage.scoped) ? usage.scoped : []
+    for (var i = 0; i < scoped.length; i++) {
+      if (scoped[i] && scoped[i].name && windowPct(scoped[i]) !== null) {
+        out.push({ label: scoped[i].name, value: Math.round(scoped[i].pct) + "% used" })
+      }
+    }
+    if (account.organizationName) out.push({ label: "Organization", value: account.organizationName })
+    if (account.usageStatus && account.usageStatus !== "ok") out.push({ label: "Status", value: account.usageStatus })
+    if (!account.usage && account.lastGoodUsage) out.push({ label: "Usage", value: "last good reading (stale)" })
     return out
   }
 
@@ -65,6 +83,7 @@
       name: nameOf(account),
       active: account.active === true,
       bars: bars(usage),
+      stats: stats(account, usage),
     }
     if (account.email) row.detail = account.email
     var flag = flagOf(account, usage)

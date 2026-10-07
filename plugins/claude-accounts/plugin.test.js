@@ -82,8 +82,34 @@ describe("claude-accounts plugin", () => {
     expect(rows[1]).toMatchObject({ name: "work", detail: "work@example.com", active: true })
     expect(rows[0].name).toBe("personal")
     expect(rows[0].bars).toEqual([
-      { label: "5h", used: 20, resetsAt: RESET_5H },
-      { label: "7d", used: 30, resetsAt: RESET_7D },
+      { label: "5h", used: 20, resetsAt: RESET_5H, periodMs: 5 * 60 * 60 * 1000 },
+      { label: "7d", used: 30, resetsAt: RESET_7D, periodMs: 7 * 24 * 60 * 60 * 1000 },
+    ])
+  })
+
+  it("passes weekly pace, projection and extra stats to the row", async () => {
+    const plugin = await loadPlugin()
+    const paced = account({
+      number: 1,
+      active: true,
+      organizationName: "Acme",
+      usage: {
+        fiveHour: { pct: 20, resetsAt: RESET_5H },
+        sevenDay: {
+          pct: 55,
+          resetsAt: RESET_7D,
+          expectedPct: 67.2,
+          willLastToReset: true,
+          projectedExhaustionAt: "2026-10-11T14:23:19Z",
+        },
+        scoped: [{ name: "Fable", pct: 3 }],
+      },
+    })
+    const row = plugin.probe(withList(makeCtx(), ok([paced]))).lines.find((l) => l.type === "accounts").rows[0]
+    expect(row.bars[1]).toMatchObject({ expected: 67.2, lasts: true, emptyAt: "2026-10-11T14:23:19Z" })
+    expect(row.stats).toEqual([
+      { label: "Fable", value: "3% used" },
+      { label: "Organization", value: "Acme" },
     ])
   })
 
@@ -111,7 +137,7 @@ describe("claude-accounts plugin", () => {
     const result = plugin.probe(withList(makeCtx(), ok([noWeek])))
     expect(result.lines.find((l) => l.label === "Weekly")).toBeUndefined()
     const rows = result.lines.find((l) => l.type === "accounts").rows
-    expect(rows[0].bars).toEqual([{ label: "5h", used: 7, resetsAt: RESET_5H }])
+    expect(rows[0].bars).toEqual([{ label: "5h", used: 7, resetsAt: RESET_5H, periodMs: 5 * 60 * 60 * 1000 }])
   })
 
   it("falls back to the last good reading when usage is stale", async () => {
@@ -126,5 +152,10 @@ describe("claude-accounts plugin", () => {
     const result = plugin.probe(withList(makeCtx(), ok([stale])))
     expect(result.lines.find((l) => l.label === "Session").used).toBe(41)
     expect(result.plan).toBe("1 account")
+    const row = result.lines.find((l) => l.type === "accounts").rows[0]
+    expect(row.stats).toEqual([
+      { label: "Status", value: "unavailable" },
+      { label: "Usage", value: "last good reading (stale)" },
+    ])
   })
 })

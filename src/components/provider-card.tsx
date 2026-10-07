@@ -137,11 +137,14 @@ export function ProviderCard({
       .filter(line => line.scope === "overview")
       .map(line => line.label)
   )
+  // An accounts line carries its own summary (active account, pool stats),
+  // so on the detail page the overview lines would only repeat it.
+  const accountsOwnDetail = scopeFilter === "all" && [...skeletonLines, ...lines].some(line => line.type === "accounts")
   const filteredSkeletonLines = scopeFilter === "all"
-    ? skeletonLines
+    ? skeletonLines.filter(line => !accountsOwnDetail || line.scope !== "overview")
     : skeletonLines.filter(line => line.scope === "overview")
   const filteredLines = scopeFilter === "all"
-    ? lines
+    ? lines.filter(line => !accountsOwnDetail || line.type === "accounts" || !overviewLabels.has(line.label))
     : lines.filter(line => overviewLabels.has(line.label))
 
   const hasResetCountdown = filteredLines.some(
@@ -433,7 +436,7 @@ function MetricLineRenderer({
     return (
       <div>
         <div className="text-sm font-medium mb-1.5">{line.label}</div>
-        <AccountList providerId={providerId} rows={line.rows} now={now} onSwitched={onRefreshPlugins} />
+        <AccountList providerId={providerId} rows={line.rows} now={now} accent={line.color ?? brandColor} onSwitched={onRefreshPlugins} />
       </div>
     )
   }
