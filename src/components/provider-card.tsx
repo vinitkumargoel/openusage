@@ -10,6 +10,7 @@ import { SkeletonLines } from "@/components/skeleton-lines"
 import { UsageHeatmap } from "@/components/usage-heatmap"
 import { UsageHistogram } from "@/components/usage-histogram"
 import { AccountList } from "@/components/account-list"
+import { PoolView } from "@/components/pool-view"
 import { LedgerCard } from "@/components/ledger-card"
 import { PluginError } from "@/components/plugin-error"
 import { useNowTicker } from "@/hooks/use-now-ticker"
@@ -137,14 +138,15 @@ export function ProviderCard({
       .filter(line => line.scope === "overview")
       .map(line => line.label)
   )
-  // An accounts line carries its own summary (active account, pool stats),
-  // so on the detail page the overview lines would only repeat it.
-  const accountsOwnDetail = scopeFilter === "all" && [...skeletonLines, ...lines].some(line => line.type === "accounts")
+  // An accounts or pool line carries its own summary (active account, pool
+  // stats), so on the detail page the overview lines would only repeat it.
+  const ownsDetail = (line: { type: string }) => line.type === "accounts" || line.type === "pool"
+  const accountsOwnDetail = scopeFilter === "all" && [...skeletonLines, ...lines].some(ownsDetail)
   const filteredSkeletonLines = scopeFilter === "all"
     ? skeletonLines.filter(line => !accountsOwnDetail || line.scope !== "overview")
     : skeletonLines.filter(line => line.scope === "overview")
   const filteredLines = scopeFilter === "all"
-    ? lines.filter(line => !accountsOwnDetail || line.type === "accounts" || !overviewLabels.has(line.label))
+    ? lines.filter(line => !accountsOwnDetail || ownsDetail(line) || !overviewLabels.has(line.label))
     : lines.filter(line => overviewLabels.has(line.label))
 
   const hasResetCountdown = filteredLines.some(
@@ -439,6 +441,10 @@ function MetricLineRenderer({
         <AccountList providerId={providerId} rows={line.rows} now={now} accent={line.color ?? brandColor} onSwitched={onRefreshPlugins} />
       </div>
     )
+  }
+
+  if (line.type === "pool") {
+    return <PoolView pool={line.pool} now={now} accent={line.color ?? brandColor} />
   }
 
   if (line.type === "histogram") {

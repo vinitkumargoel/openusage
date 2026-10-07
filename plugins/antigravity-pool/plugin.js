@@ -30,14 +30,13 @@
   var MAX_BUCKETS = 20
 
   var RETENTION_DAYS = 400
-  var DANGER_COLOR = "#ef4444"
-  var WARN_COLOR = "#f59e0b"
 
   // Google returns one bucket per window per model group. `3p` is Claude + GPT.
   var BUCKET_SLOTS = {
     "gemini-weekly": "gemWeek",
     "gemini-5h": "gemFive",
     "3p-weekly": "restWeek",
+    "3p-5h": "restFive",
   }
 
   function numOf(value) {
@@ -144,6 +143,8 @@
         authIndex: authIndex,
         projectId: String(file.project_id || ""),
         offline: file.disabled === true || file.unavailable === true,
+        joinedAt: typeof file.created_at === "string" ? file.created_at : "",
+        refreshedAt: typeof file.last_refresh === "string" ? file.last_refresh : "",
         success: numOf(file.success),
         failed: numOf(file.failed),
         buckets: parseBuckets(file.recent_requests),
@@ -462,49 +463,25 @@
 
   // Failures hide inside a healthy-looking pool average: one account can be
   // failing several times the pool rate while every quota bar still reads fine.
-  function rotationLine(ctx, accounts) {
+  function errorRates(accounts) {
     var success = 0
     var failed = 0
-    var offline = 0
     var worstRate = null
     for (var i = 0; i < accounts.length; i++) {
       var account = accounts[i]
       success += account.success
       failed += account.failed
-      if (account.offline) offline += 1
       var total = account.success + account.failed
       if (total >= 50 && account.failed > 0) {
         var rate = account.failed / total
         if (worstRate === null || rate > worstRate) worstRate = rate
       }
     }
-    var pool = success + failed
-    if (pool === 0) return null
-    var poolRate = failed / pool
-    var subtitle = null
-    var color = undefined
-    if (offline > 0) {
-      subtitle = offline + (offline === 1 ? " account offline" : " accounts offline")
-      color = DANGER_COLOR
-    } else if (worstRate !== null && worstRate > poolRate * 2) {
-      subtitle = "worst account " + (worstRate * 100).toFixed(1) + "%"
-    }
-    return ctx.line.text({
-      label: "Rotation",
-      value: (poolRate * 100).toFixed(1) + "% errors",
-      color: color,
-      subtitle: subtitle || undefined,
-    })
+    if (success + failed === 0) return null
+    return { pool: (failed / (success + failed)) * 100, worst: worstRate === null ? null : worstRate * 100 }
   }
 
   // --- Per-account rows ---
-
-  // Returns null for an instant the relay did not give us in a shape we can
-  // parse — rendering that as "now" would claim the window refills this second.
-  function relativeReset(ctx, ms, nowMs) {
-    if (!Number.isFinite(ms)) return null
-    return ctx.fmt.resetIn(Math.max(0, (ms - nowMs) / 1000)) || "now"
-  }
 
   // Driest first: cooling, then by what the 5h window has left (a free-tier
   // account has no 5h bucket, so its weekly stands in), then anything not yet
@@ -535,18 +512,33 @@
     return { slots: slots, index: index }
   }
 
-  function accountRow(ctx, account, cached, aliases, nowMs, grid) {
-    var counts = []
-    for (var g = 0; g < grid.slots.length; g++) counts.push(0)
-    var requests = 0
-    var failed = 0
+  function windowOf(fraction, resetIso, periodMs) {
+    if (typeof fraction !== "number") return undefined
+    var win = { left: pct(fraction), periodMs: periodMs }
+    if (typeof resetIso === "string" && resetIso) win.resetsAt = resetIso
+    return win
+  }
+
+  function isoOf(ms) {
+    return new Date(ms).toISOString()
+  }
+
+  function poolAccount(ctx, account, cached, aliases, nowMs, grid) {
+    var requests = []
+    var failures = []
+    for (var g = 0; g < grid.slots.length; g++) {
+      requests.push(0)
+      failures.push(0)
+    }
     var offGrid = 0
     for (var i = 0; i < account.buckets.length; i++) {
       var slot = grid.index[account.buckets[i].time]
-      if (typeof slot === "number") counts[slot] += account.buckets[i].success
-      else offGrid += 1
-      requests += account.buckets[i].success
-      failed += account.buckets[i].failed
+      if (typeof slot !== "number") {
+        offGrid += 1
+        continue
+      }
+      requests[slot] += account.buckets[i].success
+      failures[slot] += account.buckets[i].failed
     }
     if (offGrid > 0) {
       ctx.host.log.warn(
@@ -554,68 +546,52 @@
         " request buckets outside the pool's time grid; they are not drawn"
       )
     }
-    var row = {
-      label: accountName(account, aliases),
-      buckets: counts,
-      value: "",
-      note: "",
-    }
-    var tips = []
     var cooling = account.cooling && account.cooling.untilMs > nowMs ? account.cooling : null
-    if (cooling) {
-      row.value = "cooling"
-      row.note = relativeReset(ctx, cooling.untilMs, nowMs) || "—"
-      row.color = DANGER_COLOR
-      tips.push("relay " + cooling.reason + " · retries in " + row.note)
-    } else if (account.offline) {
-      row.value = "offline"
-      row.note = "—"
-      row.color = DANGER_COLOR
-    } else if (!cached) {
-      row.value = "—"
-      row.note = "sampling"
-    } else if (typeof cached.gemFive !== "number") {
-      row.value = "wk only"
-      var weekAt = typeof cached.gemWeekReset === "string"
-        ? relativeReset(ctx, Date.parse(cached.gemWeekReset), nowMs)
-        : null
-      row.note = weekAt ? "wk " + weekAt : "—"
-      tips.push("no 5h bucket (free tier)")
-    } else {
-      row.value = pct(cached.gemFive) + "%"
-      row.note = (typeof cached.gemFiveReset === "string"
-        ? relativeReset(ctx, Date.parse(cached.gemFiveReset), nowMs)
-        : null) || "idle"
-      if (cached.gemFive < 0.1) row.color = DANGER_COLOR
-      else if (cached.gemFive < 0.25) row.color = WARN_COLOR
+    var out = {
+      id: account.authIndex,
+      name: accountName(account, aliases),
+      state: cooling ? "cooling" : account.offline ? "offline" : cached ? "live" : "sampling",
+      requests: requests,
+      failures: failures,
+      ok: account.success,
+      failed: account.failed,
     }
-    if (cached && typeof cached.gemWeek === "number") {
-      var weekly = pct(cached.gemWeek) + "% weekly left"
-      var weeklyAt = typeof cached.gemWeekReset === "string"
-        ? relativeReset(ctx, Date.parse(cached.gemWeekReset), nowMs)
-        : null
-      if (weeklyAt) weekly += " · resets in " + weeklyAt
-      tips.push(weekly)
+    if (cooling) out.cooldown = { reason: cooling.reason, until: isoOf(cooling.untilMs) }
+    var models = []
+    var seen = {}
+    for (var m = 0; m < account.modelCooldowns.length; m++) {
+      var mc = account.modelCooldowns[m]
+      if (mc.untilMs <= nowMs || seen[mc.model]) continue
+      seen[mc.model] = true
+      models.push({ model: mc.model, until: isoOf(mc.untilMs) })
     }
-    if (account.buckets.length > 0) {
-      tips.push(requests + " requests in the last " + account.buckets.length * 10 + "m" + (failed > 0 ? " · " + failed + " failed" : ""))
+    if (models.length > 0) out.models = models
+    if (cached) {
+      out.five = windowOf(cached.gemFive, cached.gemFiveReset, FIVE_HOUR_MS)
+      out.week = windowOf(cached.gemWeek, cached.gemWeekReset, WEEK_MS)
+      out.restFive = windowOf(cached.restFive, cached.restFiveReset, FIVE_HOUR_MS)
+      out.restWeek = windowOf(cached.restWeek, cached.restWeekReset, WEEK_MS)
+      if (typeof cached.fetchedAtMs === "number") out.sampledAt = isoOf(cached.fetchedAtMs)
+      // A free-tier account has no 5h bucket; its weekly is all it has.
+      if (!out.five && out.week) out.tag = "free"
     }
-    if (account.modelCooldowns && account.modelCooldowns.length > 0) {
-      var activeModels = []
-      for (var m = 0; m < account.modelCooldowns.length; m++) {
-        if (account.modelCooldowns[m].untilMs > nowMs && activeModels.indexOf(account.modelCooldowns[m].model) < 0) {
-          activeModels.push(account.modelCooldowns[m].model)
-        }
-      }
-      if (activeModels.length > 0) {
-        tips.push("cooling: " + activeModels.join(", "))
-      }
-    }
-    if (tips.length > 0) row.tooltip = tips.join(" · ")
-    return row
+    if (models.length > 0 && !out.tag) out.tag = "model"
+    if (account.projectId) out.project = account.projectId
+    if (account.joinedAt) out.joinedAt = account.joinedAt
+    if (account.refreshedAt) out.refreshedAt = account.refreshedAt
+    return out
   }
 
-  function accountsLine(ctx, accounts, state, aliases, now) {
+  function meanWindow(entries, key, nowMs, periodMs) {
+    var mean = meanOf(entries, key)
+    if (mean === null) return undefined
+    var reset = earliestReset(entries, key + "Reset", nowMs)
+    return windowOf(mean, reset ? reset.iso : null, periodMs)
+  }
+
+  // Everything the detail page shows: pool means, counts, error rates, weekly
+  // cohorts and one entry per account, driest first.
+  function poolLine(ctx, accounts, entries, state, aliases, failures, now) {
     var nowMs = now.getTime()
     var ranked = []
     for (var i = 0; i < accounts.length; i++) {
@@ -627,24 +603,40 @@
       return a.account.authIndex < b.account.authIndex ? -1 : 1
     })
     var grid = bucketGrid(accounts)
-    var rows = []
+    var list = []
+    var counts = { total: accounts.length, live: 0, cooling: 0, offline: 0, sampled: entries.length, unreachable: failures }
     for (var r = 0; r < ranked.length; r++) {
-      rows.push(accountRow(ctx, ranked[r].account, ranked[r].cached, aliases, nowMs, grid))
+      var item = poolAccount(ctx, ranked[r].account, ranked[r].cached, aliases, nowMs, grid)
+      if (item.state === "cooling") counts.cooling += 1
+      else if (item.state === "offline") counts.offline += 1
+      else counts.live += 1
+      list.push(item)
     }
-    var axis = "no request history from the relay"
+    var pool = {
+      five: meanWindow(entries, "gemFive", nowMs, FIVE_HOUR_MS),
+      week: meanWindow(entries, "gemWeek", nowMs, WEEK_MS),
+      restFive: meanWindow(entries, "restFive", nowMs, FIVE_HOUR_MS),
+      restWeek: meanWindow(entries, "restWeek", nowMs, WEEK_MS),
+      counts: counts,
+      cohorts: [],
+      slots: grid.slots,
+      accounts: list,
+    }
+    var rates = errorRates(accounts)
+    if (rates) {
+      pool.errorRate = rates.pool
+      if (rates.worst !== null) pool.worstRate = rates.worst
+    }
+    var cohorts = cohortsOf(entries)
+    for (var c = 0; c < cohorts.length; c++) {
+      pool.cohorts.push({ count: cohorts[c].count, left: pct(cohorts[c].sum / cohorts[c].count), resetsAt: isoOf(cohorts[c].resetMs) })
+    }
     if (grid.slots.length > 0) {
       var first = grid.slots[0]
       var last = grid.slots[grid.slots.length - 1]
-      var from = first.split("-")[0]
-      var to = last.split("-")[1] || last.split("-")[0]
-      axis = from + " → " + to + " relay time · 10-min buckets"
+      pool.axis = first.split("-")[0] + " → " + (last.split("-")[1] || last.split("-")[0]) + " relay time · 10-min buckets"
     }
-    return ctx.line.histogram({
-      label: "Accounts · 5h",
-      columns: { buckets: "requests", value: "5h left", note: "resets" },
-      axis: axis,
-      rows: rows,
-    })
+    return ctx.line.pool({ label: "Accounts", pool: pool })
   }
 
   function heatmapLine(ctx, days) {
@@ -693,29 +685,7 @@
       subtitle: poolSubtitle || undefined,
     }))
 
-    lines.push(accountsLine(ctx, accounts, state, cfg.aliases, now))
-
-    // Only worth rows when the windows are actually skewed; one cohort is already
-    // fully described by the weekly bar's own countdown.
-    var cohorts = cohortsOf(entries)
-    if (cohorts.length > 1) {
-      for (var c = 0; c < cohorts.length; c++) {
-        var cohort = cohorts[c]
-        var relative = ctx.fmt.resetIn(Math.max(0, (cohort.resetMs - now.getTime()) / 1000))
-        lines.push(ctx.line.text({
-          label: accountsLabel(cohort.count),
-          value: pct(cohort.sum / cohort.count) + "% left" + (relative ? " · " + relative : ""),
-        }))
-      }
-    }
-
-    var restWeek = meanOf(entries, "restWeek")
-    if (restWeek !== null) {
-      lines.push(ctx.line.text({ label: "Claude & GPT", value: pct(restWeek) + "% left" }))
-    }
-
-    var rotation = rotationLine(ctx, accounts)
-    if (rotation) lines.push(rotation)
+    lines.push(poolLine(ctx, accounts, entries, state, cfg.aliases, failures, now))
 
     var heatmap = heatmapLine(ctx, state.days)
     if (heatmap) lines.push(heatmap)

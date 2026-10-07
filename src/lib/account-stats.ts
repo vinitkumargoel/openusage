@@ -54,9 +54,23 @@ export function elapsedPct(bar: AccountBar, now: number): number | null {
 
 const BURN_MIN_ELAPSED_MS = 10 * 60 * 1000
 
+/** Time until the window is used up at this rate, or null if it won't be (or can't tell). */
+export function msToLimit(bar: AccountBar, now: number): number | null {
+  if (bar.used <= 0 || !bar.periodMs) return null
+  if (bar.used >= 100) return 0
+  const gone = elapsedPct(bar, now)
+  if (gone === null) return null
+  const elapsedMs = (gone / 100) * bar.periodMs
+  if (elapsedMs < BURN_MIN_ELAPSED_MS) return null
+  const hitInMs = (elapsedMs * 100) / bar.used - elapsedMs
+  const leftMs = Date.parse(bar.resetsAt ?? "") - now
+  return hitInMs < leftMs ? hitInMs : null
+}
+
 /** Where the 5h window lands at this rate: used ÷ share of window gone. */
 export function burn(bar: AccountBar, now: number): { text: string; short: string; tone: Tone } {
   if (bar.used <= 0) return { text: "idle", short: "idle", tone: "muted" }
+  if (bar.used >= 100) return { text: "empty until refill", short: "empty", tone: "bad" }
   const gone = elapsedPct(bar, now)
   if (gone === null || !bar.periodMs || (gone / 100) * bar.periodMs < BURN_MIN_ELAPSED_MS) {
     return { text: "window just started", short: "just started", tone: "muted" }

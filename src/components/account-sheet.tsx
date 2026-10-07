@@ -16,13 +16,14 @@ interface AccountSheetProps {
   isBest: boolean
   now: number
   pending: string | null
+  accent: string
   onSwitch: (id: string) => void
   onNav: (step: number) => void
   onClose: () => void
 }
 
 /** Bottom sheet with every stat for one account. Esc, ←/→ and S work. */
-export function AccountSheet({ row, isBest, now, pending, onSwitch, onNav, onClose }: AccountSheetProps) {
+export function AccountSheet({ row, isBest, now, pending, accent, onSwitch, onNav, onClose }: AccountSheetProps) {
   const five = barOf(row, "5h")
   const week = barOf(row, "7d")
   const pace = week ? weeklyPace(week, now) : null
@@ -44,7 +45,7 @@ export function AccountSheet({ row, isBest, now, pending, onSwitch, onNav, onClo
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-50 bg-black/40 animate-in fade-in" onClick={onClose}>
+    <div className="fixed inset-0 z-50 bg-black/40 animate-in fade-in" style={{ "--acc": accent } as React.CSSProperties} onClick={onClose}>
       <div
         role="dialog"
         aria-modal="true"

@@ -12,7 +12,7 @@ Run both only if you want both. They read different things and will show differe
 - **Auth:** `X-Management-Key` header, from a config file you write
 - **Quota:** fraction (0.0–1.0, where 1.0 = 100% remaining), per model group per window
 - **Quota windows:** weekly and 5-hour, **per account** — they do not line up across the pool
-- **Per-account rows:** one row per account with its request histogram, 5h remaining and reset, driest first
+- **Detail page:** pool card, KPIs and one tile per account (rings, request bars, status), driest first, with a detail sheet per account
 - **Requires:** a reachable CLIProxy relay with at least one `antigravity` account
 
 ## Setup
@@ -140,10 +140,7 @@ The reply wraps the upstream one; `body` is a JSON *string*:
 | Gemini weekly | overview | Mean remaining across live accounts; counts down to the **earliest reset still ahead**. A cached reading whose account stopped answering keeps a reset instant that eventually passes, and a passed instant is skipped |
 | Gemini 5h | overview | Same, 5-hour window |
 | Pool | overview | Account count, with a subtitle when some are offline, cooling, unreachable, or not yet sampled |
-| Accounts · 5h | detail | One row per account: its last 3h20m of requests as a histogram, 5h left, and the 5h reset. Driest first |
-| *N* accounts | detail | One row per reset cohort — only when the windows are actually skewed |
-| Claude & GPT | detail | One line, because it is usually untouched |
-| Rotation | detail | Pool error rate; names an account failing well above it, red when one is offline |
+| Accounts | detail | The pool view (below): pool card, KPIs, one tile per account, weekly refills, a detail sheet per account. Replaces the overview lines on the detail page |
 | Requests | detail | Daily request count |
 
 Card badge reads `CLIProxy`, so a pooled card is never mistaken for a local one.
@@ -154,24 +151,20 @@ Requests are handed out round-robin, so the pool behaves like one account holdin
 
 Disabled and unavailable accounts are left out of the mean and counted in the `Pool` line instead. Free-tier accounts have no 5h bucket at all, so the Gemini 5h mean is over the accounts that have one — which can be fewer than the `Pool` count.
 
-### Per-account rows
+### The pool view
 
-Each row is one account. The bars are the relay's `recent_requests` buckets (10 minutes each, last ~3h20m), tinted by quartile across the whole block so a quiet account looks quiet next to a busy one. Every row is drawn on one shared time grid — the longest bucket series in the pool — so the same column is the same ten minutes on every row; an account whose history starts later is zero-filled before it. The two columns on the right are the 5h window: how much is left and when it resets. Hovering a row shows the weekly figure, its reset, and the request count for the span.
+- **Pool card:** ring of the Gemini 5h mean (inner ring weekly). 5h bar with stripes for time gone since the earliest reset's window began, and either the first live account to run dry at its current rate ("carbon-creek dry ~9m") or the pool's own pace. Weekly bar with an even-spend marker. Claude & GPT weekly and 5h means underneath (resets on hover)
+- **KPIs:** live accounts (one dot per account, red when cooling or offline), pool error rate (worst account on hover, red dot for an account failing over twice the pool rate), countdown to the next weekly refill
+- **Tiles:** name, tag (`cool`, `off`, `model` = a model is parked, `free` = no 5h bucket, `…` = not sampled yet), ring of what's left, 5h and weekly used, status (`dry ~1h 4m`, `cooling · 41m`, `idle · full`, `wk only`), the account's last ~3h20m of requests on one shared scale (failures in red), next reset and request count
+- **Filters / sort:** All, Live, Low (under 25% left), Issues (not live, or a model parked). Driest (the plugin's order), Most left, Busiest, Name
+- **Sheet** (tap a tile): Gemini 5h and weekly, the 5h window and weekly pace, a bigger request chart, Claude & GPT windows, recent and lifetime ok/failed with the error rate, cooldown reason and time, parked models, weekly cohort, when the quota was sampled, token refresh, date it joined the pool, project and auth index. ←/→ and Esc work
+- Email addresses are never passed to the app
 
-| Row reads | Meaning |
-|---|---|
-| `65% · 2h 58m` | 5h left, resets in 2h 58m. Red under 10%, amber under 25% |
-| `cooling · 41m` | The relay parked this account after a 429 and retries in 41m |
-| `wk only · wk 2d 3h` | Free tier: no 5h bucket, so the weekly reset is shown instead |
-| `100% · idle` | The 5h window has not started (no reset time yet) |
-| `— · sampling` | Quota not read yet this probe |
-| `offline` | Disabled or unavailable on the relay |
-
-Rows are sorted driest first: cooling, then by 5h left (weekly stands in for free tier), then unsampled, then offline.
+Accounts are ordered driest first: cooling, then by 5h left (weekly stands in for free tier), then unsampled, then offline. Every account's request buckets sit on one shared time grid (the longest series in the pool), zero-filled before a later start.
 
 ### Reset cohorts
 
-Weekly windows start whenever an account was first used, so a pool has several. Accounts whose resets are within an hour of each other are grouped into a cohort — measured as the gap between them, so two resets twenty seconds either side of the half hour are one cohort, not two — and the rows only appear when there is more than one — a single cohort is already described by the weekly bar's own countdown.
+Weekly windows start whenever an account was first used, so a pool has several. Accounts whose resets are within an hour of each other are grouped into a cohort — measured as the gap between them, so two resets twenty seconds either side of the half hour are one cohort, not two — and the Weekly refills list only appears when there is more than one — a single cohort is already described by the weekly bar's own countdown.
 
 This is the difference between "73% left" and knowing that six accounts refill tonight and the other three not until Friday.
 

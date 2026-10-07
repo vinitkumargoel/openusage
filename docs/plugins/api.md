@@ -517,6 +517,17 @@ ctx.line.accounts({
 })
 ```
 
+### `ctx.line.pool(opts)`
+
+Accounts pooled behind a relay, shown as a summary card plus one tile each (display only, no actions).
+On the detail page it replaces the plugin's overview lines.
+
+- `pool.five` / `week` / `restFive` / `restWeek`: `{ left, resetsAt?, periodMs? }`, percent left (clamped 0–100).
+- `pool.counts`: `{ total, live, cooling, offline, sampled, unreachable }`. `errorRate`, `worstRate`: percent.
+- `pool.cohorts[]`: `{ count, left, resetsAt }`. `pool.slots[]`: bucket labels shared by every account; `axis`: caption.
+- `pool.accounts[]`: `{ id, name, state: "live"|"cooling"|"offline"|"sampling", tag?, five?, week?, restFive?, restWeek?, requests[], failures[], ok, failed, cooldown?: { reason, until }, models?: [{ model, until }], project?, joinedAt?, refreshedAt?, sampledAt? }`.
+- Caps: 50 accounts, 30 buckets, 8 cohorts, 8 models, 120 chars per string. Unknown `state` is an error line.
+
 ## cswap (Claude Accounts only)
 
 ```typescript

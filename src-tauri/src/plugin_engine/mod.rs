@@ -1,4 +1,5 @@
 pub mod accounts_line;
+pub mod pool_line;
 pub mod host_api;
 pub mod host_cswap;
 pub mod manifest;

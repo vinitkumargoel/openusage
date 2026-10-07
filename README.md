@@ -33,7 +33,7 @@ OpenUsage lives in your menu bar and shows you how much of your AI coding subscr
 
 - [**Amp**](docs/providers/amp.md) / free tier, bonus, credits
 - [**Antigravity**](docs/providers/antigravity.md) / all models
-- [**Antigravity Pool**](docs/providers/antigravity-pool.md) / pooled accounts behind a CLIProxy relay, reset cohorts, request history
+- [**Antigravity Pool**](docs/providers/antigravity-pool.md) / pooled accounts behind a CLIProxy relay: pool card, per-account tiles and detail sheet, reset cohorts, request history
 - [**Claude**](docs/providers/claude.md) / session, weekly, extra usage, local token usage (ccusage)
 - [**Claude Accounts**](docs/providers/claude-accounts.md) / every login saved by claude-swap, 5h and 7d per account, one-click switch
 - [**Codex**](docs/providers/codex.md) / session, weekly, reviews, credits

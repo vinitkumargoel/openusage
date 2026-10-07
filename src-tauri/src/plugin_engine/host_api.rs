@@ -1051,6 +1051,11 @@ pub fn inject_utils(ctx: &rquickjs::Ctx<'_>) -> rquickjs::Result<()> {
                     var line = { type: "accounts", label: opts.label, rows: opts.rows };
                     if (opts.color) line.color = opts.color;
                     return line;
+                },
+                pool: function(opts) {
+                    var line = { type: "pool", label: opts.label, pool: opts.pool };
+                    if (opts.color) line.color = opts.color;
+                    return line;
                 }
             };
 

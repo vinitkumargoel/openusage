@@ -31,7 +31,7 @@ export function shortReset(now: number, resetsAt?: string): string {
 }
 
 /** Slides tiles from their old spot when sort, filter or the active account changes. */
-function useTileMotion() {
+export function useTileMotion() {
   const nodes = useRef(new Map<string, HTMLDivElement>())
   const last = useRef(new Map<string, { x: number; y: number }>())
   useLayoutEffect(() => {
@@ -232,7 +232,7 @@ export function AccountList({ providerId, rows, now, accent = "#DE7356", onSwitc
       )}
 
       {open && (
-        <AccountSheet row={open} isBest={best?.id === open.id} now={now} pending={pending} onSwitch={(id) => void switchTo(id)} onNav={nav} onClose={close} />
+        <AccountSheet row={open} isBest={best?.id === open.id} now={now} pending={pending} accent={accent} onSwitch={(id) => void switchTo(id)} onNav={nav} onClose={close} />
       )}
     </div>
   )

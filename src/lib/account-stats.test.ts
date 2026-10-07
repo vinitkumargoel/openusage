@@ -33,6 +33,7 @@ describe("account-stats", () => {
 
   it("burn projects the window end, or when the limit hits", () => {
     expect(burn(row("1", 0).bars[0], NOW).text).toBe("idle")
+    expect(burn(row("1", 100).bars[0], NOW).short).toBe("empty")
     expect(burn(row("1", 30).bars[0], NOW).text).toBe("on pace for 50%")
     // 90% used with 60% of the window gone → limit after 66.7% → in 20m.
     expect(burn(row("1", 90).bars[0], NOW)).toEqual({ text: "hits limit in ~20m", short: "limit ~20m", tone: "bad" })

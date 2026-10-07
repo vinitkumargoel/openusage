@@ -135,6 +135,7 @@ const dayKeyOf = (ms) => {
 const todayKey = () => dayKeyOf(NOW_MS)
 
 const lineByLabel = (result, label) => result.lines.find((line) => line.label === label)
+const poolOf = (result) => result.lines.find((line) => line.type === "pool").pool
 const apiCallCount = (ctx) =>
   ctx.host.http.request.mock.calls.filter(([opts]) => opts.url === API_CALL_URL).length
 
@@ -291,12 +292,12 @@ describe("antigravity-pool plugin", () => {
       expect(weekly.periodDurationMs).toBe(7 * 24 * 60 * 60 * 1000)
     })
 
-    it("collapses Claude & GPT to one line", () => {
+    it("passes the Claude & GPT pool mean to the detail view, not as its own line", () => {
       writeConfig(ctx)
       wireRelay(ctx, { files: [makeAccount({})], quotaFor: () => ({ rest: 1 }) })
       const result = plugin.probe(ctx)
-      expect(lineByLabel(result, "Claude & GPT").value).toBe("100% left")
-      expect(result.lines.filter((line) => line.label === "Claude & GPT")).toHaveLength(1)
+      expect(poolOf(result).restWeek).toMatchObject({ left: 100 })
+      expect(lineByLabel(result, "Claude & GPT")).toBeUndefined()
     })
 
     it("leaves offline accounts out of the mean but visible in the count", () => {
@@ -315,6 +316,8 @@ describe("antigravity-pool plugin", () => {
   })
 
   describe("reset cohorts", () => {
+    const cohortsOf = (result) => poolOf(result).cohorts
+
     it("groups accounts that reset on the same hour", () => {
       writeConfig(ctx)
       const files = makePool()
@@ -328,20 +331,18 @@ describe("antigravity-pool plugin", () => {
       // Three probes to sample all nine accounts through the stagger.
       plugin.probe(ctx)
       plugin.probe(ctx)
-      const result = plugin.probe(ctx)
-
-      const cohorts = result.lines.filter((line) => /^\d+ accounts?$/.test(line.label))
-      expect(cohorts).toHaveLength(2)
-      expect(cohorts[0]).toMatchObject({ label: "6 accounts", value: "60% left · 10h 31m" })
-      expect(cohorts[1]).toMatchObject({ label: "3 accounts", value: "90% left · 4d 1h" })
+      const cohorts = cohortsOf(plugin.probe(ctx))
+      expect(cohorts).toEqual([
+        { count: 6, left: 60, resetsAt: new Date(RESET_A).toISOString() },
+        { count: 3, left: 90, resetsAt: new Date(RESET_B).toISOString() },
+      ])
     })
 
-    it("stays quiet when every window is aligned", () => {
+    it("is a single cohort when every window is aligned", () => {
       writeConfig(ctx)
       const files = [makeAccount({ auth_index: "a" }), makeAccount({ auth_index: "b" })]
       wireRelay(ctx, { files, quotaFor: () => ({ weeklyReset: RESET_A }) })
-      const result = plugin.probe(ctx)
-      expect(result.lines.filter((line) => /^\d+ accounts?$/.test(line.label))).toHaveLength(0)
+      expect(cohortsOf(plugin.probe(ctx))).toHaveLength(1)
     })
 
     it("treats resets either side of the half hour as one cohort", () => {
@@ -353,8 +354,7 @@ describe("antigravity-pool plugin", () => {
         quotaFor: (idx) =>
           idx === "a" ? { weeklyReset: "2026-09-01T17:29:50Z" } : { weeklyReset: "2026-09-01T17:30:10Z" },
       })
-      const result = plugin.probe(ctx)
-      expect(result.lines.filter((line) => /^\d+ accounts?$/.test(line.label))).toHaveLength(0)
+      expect(cohortsOf(plugin.probe(ctx))).toHaveLength(1)
     })
 
     it("treats resets minutes apart as one cohort", () => {
@@ -365,8 +365,7 @@ describe("antigravity-pool plugin", () => {
         quotaFor: (idx) =>
           idx === "a" ? { weeklyReset: "2026-09-01T17:44:31Z" } : { weeklyReset: "2026-09-01T17:45:12Z" },
       })
-      const result = plugin.probe(ctx)
-      expect(result.lines.filter((line) => /^\d+ accounts?$/.test(line.label))).toHaveLength(0)
+      expect(cohortsOf(plugin.probe(ctx))).toHaveLength(1)
     })
   })
 
@@ -543,31 +542,34 @@ describe("antigravity-pool plugin", () => {
     })
   })
 
-  describe("per-account rows", () => {
-    const rowsOf = (result) => lineByLabel(result, "Accounts · 5h").rows
+  describe("per-account entries", () => {
+    const accountsOf = (result) => poolOf(result).accounts
 
-    it("draws one row per account from the relay's request buckets, driest first", () => {
+    it("gives one entry per account with its request buckets, driest first", () => {
       writeConfig(ctx)
       const files = [
-        makeAccount({ auth_index: "a", project_id: "alien-agency-s1ttq", recent_requests: makeBuckets({ 5: 31, 6: 3, 17: 23 }) }),
+        makeAccount({ auth_index: "a", project_id: "alien-agency-s1ttq", success: 120, failed: 3, recent_requests: makeBuckets({ 5: 31, 6: 3, 17: 23 }) }),
         makeAccount({ auth_index: "b", project_id: "yodeling-myth-g620j", recent_requests: makeBuckets({ 17: 8 }) }),
       ]
       wireRelay(ctx, { files, quotaFor: (idx) => (idx === "a" ? { gemFive: 0.93, gemWeek: 0.91 } : { gemFive: 0.65, gemWeek: 0.56 }) })
-      const line = lineByLabel(plugin.probe(ctx), "Accounts · 5h")
+      const pool = poolOf(plugin.probe(ctx))
 
-      expect(line.type).toBe("histogram")
-      expect(line.columns).toEqual({ buckets: "requests", value: "5h left", note: "resets" })
-      expect(line.axis).toBe("17:20 → 20:40 relay time · 10-min buckets")
-      expect(line.rows.map((row) => row.label)).toEqual(["yodeling-myth", "alien-agency"])
+      expect(pool.axis).toBe("17:20 → 20:40 relay time · 10-min buckets")
+      expect(pool.slots).toHaveLength(20)
+      expect(pool.accounts.map((a) => a.name)).toEqual(["yodeling-myth", "alien-agency"])
 
-      const [driest, freshest] = line.rows
-      expect(driest).toMatchObject({ value: "65%", note: "1h 17m" })
-      expect(driest.buckets).toHaveLength(20)
-      expect(driest.buckets[17]).toBe(8)
-      expect(driest.tooltip).toBe("56% weekly left · resets in 10h 31m · 8 requests in the last 200m")
-      expect(driest.color).toBeUndefined()
-      expect(freshest.buckets[5]).toBe(31)
-      expect(freshest.tooltip).toContain("57 requests")
+      const [driest, freshest] = pool.accounts
+      expect(driest).toMatchObject({
+        id: "b",
+        state: "live",
+        five: { left: 65, resetsAt: RESET_5H, periodMs: 5 * 60 * 60 * 1000 },
+        week: { left: 56, resetsAt: RESET_A, periodMs: 7 * 24 * 60 * 60 * 1000 },
+        project: "yodeling-myth-g620j",
+      })
+      expect(driest.requests[17]).toBe(8)
+      expect(driest.sampledAt).toBe(new Date(NOW_MS).toISOString())
+      expect(freshest.requests[5]).toBe(31)
+      expect(freshest).toMatchObject({ ok: 120, failed: 3 })
     })
 
     it("names accounts by project words, or by alias when configured", () => {
@@ -578,23 +580,11 @@ describe("antigravity-pool plugin", () => {
         makeAccount({ auth_index: "c123456", project_id: "" }),
       ]
       wireRelay(ctx, { files })
-      const labels = rowsOf(plugin.probe(ctx)).map((row) => row.label)
-      expect(labels).toEqual(expect.arrayContaining(["alien-agency", "work-2", "#c12345"]))
+      const names = accountsOf(plugin.probe(ctx)).map((a) => a.name)
+      expect(names).toEqual(expect.arrayContaining(["alien-agency", "work-2", "#c12345"]))
     })
 
-    it("colours a nearly drained window", () => {
-      writeConfig(ctx)
-      const files = [makeAccount({ auth_index: "a" }), makeAccount({ auth_index: "b" }), makeAccount({ auth_index: "c" })]
-      wireRelay(ctx, { files, quotaFor: (idx) => ({ gemFive: idx === "a" ? 0.05 : idx === "b" ? 0.2 : 0.5 }) })
-      const rows = rowsOf(plugin.probe(ctx))
-      expect(rows.map((row) => [row.value, row.color])).toEqual([
-        ["5%", "#ef4444"],
-        ["20%", "#f59e0b"],
-        ["50%", undefined],
-      ])
-    })
-
-    it("shows a relay cooldown in red and keeps that account out of the pool mean", () => {
+    it("marks a relay cooldown and keeps that account out of the pool mean", () => {
       writeConfig(ctx)
       const retryAt = new Date(NOW_MS + 41 * 60 * 1000).toISOString()
       const files = [
@@ -603,23 +593,23 @@ describe("antigravity-pool plugin", () => {
       ]
       wireRelay(ctx, { files, quotaFor: (idx) => ({ gemWeek: idx === "a" ? 0.1 : 0.7 }) })
       const result = plugin.probe(ctx)
-      const [cooling] = rowsOf(result)
-      expect(cooling).toMatchObject({ value: "cooling", note: "41m", color: "#ef4444" })
-      expect(cooling.tooltip).toContain("relay credential_quota · retries in 41m")
+      const [cooling] = accountsOf(result)
+      expect(cooling).toMatchObject({ state: "cooling", cooldown: { reason: "credential_quota", until: retryAt } })
       expect(lineByLabel(result, "Gemini weekly").used).toBe(30)
       expect(lineByLabel(result, "Pool").subtitle).toBe("1 cooling")
+      expect(poolOf(result).counts).toMatchObject({ total: 2, live: 1, cooling: 1 })
     })
 
     it("ignores a cooldown that has already expired", () => {
       writeConfig(ctx)
       const retryAt = new Date(NOW_MS - 1000).toISOString()
       wireRelay(ctx, { files: [makeAccount({ cooldowns: [{ reason: "quota", retry_at: retryAt }] })] })
-      const [row] = rowsOf(plugin.probe(ctx))
-      expect(row.value).toBe("90%")
-      expect(row.color).toBeUndefined()
+      const [account] = accountsOf(plugin.probe(ctx))
+      expect(account.state).toBe("live")
+      expect(account.cooldown).toBeUndefined()
     })
 
-    it("ignores model-scoped cooldowns for account-level cooling, showing them in tooltips", () => {
+    it("lists model-scoped cooldowns without parking the account", () => {
       writeConfig(ctx)
       const retryAt = new Date(NOW_MS + 41 * 60 * 1000).toISOString()
       const files = [
@@ -627,15 +617,14 @@ describe("antigravity-pool plugin", () => {
           auth_index: "a",
           cooldowns: [
             { scope: "model", model_key: "gemini-3.1-flash-image", reason: "quota", retry_at: retryAt },
+            { scope: "model", model_key: "gemini-3.1-flash-image", reason: "quota", retry_at: retryAt },
           ],
         }),
       ]
       wireRelay(ctx, { files, quotaFor: () => ({ gemFive: 0.8, gemWeek: 0.75 }) })
       const result = plugin.probe(ctx)
-      const [row] = rowsOf(result)
-      expect(row.value).toBe("80%")
-      expect(row.color).toBeUndefined()
-      expect(row.tooltip).toContain("cooling: gemini-3.1-flash-image")
+      const [account] = accountsOf(result)
+      expect(account).toMatchObject({ state: "live", tag: "model", models: [{ model: "gemini-3.1-flash-image", until: retryAt }] })
       expect(lineByLabel(result, "Gemini weekly").used).toBe(25)
       expect(lineByLabel(result, "Pool").subtitle).toBeUndefined()
     })
@@ -651,11 +640,10 @@ describe("antigravity-pool plugin", () => {
       ]
       wireRelay(ctx, { files, quotaFor: () => ({ gemFive: 0.8, gemWeek: 0.6 }) })
       const result = plugin.probe(ctx)
-      const [cooling] = rowsOf(result)
-      expect(cooling).toMatchObject({ value: "cooling", note: "41m", color: "#ef4444" })
+      expect(accountsOf(result)[0].state).toBe("cooling")
       expect(lineByLabel(result, "Gemini weekly").used).toBe(40)
       expect(lineByLabel(result, "Gemini 5h").used).toBe(20)
-      expect(lineByLabel(result, "Pool").subtitle).toBe("1 cooling")
+      expect(poolOf(result).five.left).toBe(80)
     })
 
     it("handles a free-tier account with no 5h bucket, an idle window, and an offline account", () => {
@@ -669,29 +657,30 @@ describe("antigravity-pool plugin", () => {
         files,
         quotaFor: (idx) => (idx === "free" ? { gemFive: null, gemWeek: 0.38 } : { gemFive: 1, fiveReset: null }),
       })
-      const rows = rowsOf(plugin.probe(ctx))
-      expect(rows.map((row) => row.label)).toEqual(["project-1", "project-1", "project-1"])
-      const free = rows.find((row) => row.value === "wk only")
-      expect(free.note).toBe("wk 10h 31m")
-      expect(free.tooltip).toContain("no 5h bucket (free tier)")
-      const idle = rows.find((row) => row.value === "100%")
-      expect(idle.note).toBe("idle")
-      expect(rows[2]).toMatchObject({ value: "offline", note: "—", color: "#ef4444" })
+      const accounts = accountsOf(plugin.probe(ctx))
+      const free = accounts.find((a) => a.id === "free")
+      expect(free.tag).toBe("free")
+      expect(free.five).toBeUndefined()
+      expect(free.week.left).toBe(38)
+      const idle = accounts.find((a) => a.id === "idle")
+      expect(idle.five).toEqual({ left: 100, periodMs: 5 * 60 * 60 * 1000 })
+      expect(accounts[2]).toMatchObject({ id: "off", state: "offline" })
     })
 
     it("marks an account the probe has not sampled yet", () => {
       writeConfig(ctx)
       wireRelay(ctx, { files: [makeAccount({ auth_index: "a" }), makeAccount({ auth_index: "b" })], quotaFor: (idx) => (idx === "b" ? { error: 500 } : {}) })
-      const rows = rowsOf(plugin.probe(ctx))
-      expect(rows[1]).toMatchObject({ value: "—", note: "sampling" })
+      const result = plugin.probe(ctx)
+      expect(accountsOf(result)[1]).toMatchObject({ id: "b", state: "sampling" })
+      expect(poolOf(result).counts).toMatchObject({ sampled: 1, unreachable: 1 })
     })
 
-    it("says so when the relay sends no request history", () => {
+    it("has no axis when the relay sends no request history", () => {
       writeConfig(ctx)
       wireRelay(ctx, { files: [makeAccount({})] })
-      const line = lineByLabel(plugin.probe(ctx), "Accounts · 5h")
-      expect(line.axis).toBe("no request history from the relay")
-      expect(line.rows[0].buckets).toEqual([])
+      const pool = poolOf(plugin.probe(ctx))
+      expect(pool.axis).toBeUndefined()
+      expect(pool.accounts[0].requests).toEqual([])
     })
   })
 
@@ -715,24 +704,25 @@ describe("antigravity-pool plugin", () => {
     })
   })
 
-  describe("histogram grid", () => {
-    it("draws every row on one time grid, zero-filling a shorter series", () => {
+  describe("request grid", () => {
+    it("puts every account on one time grid, zero-filling a shorter series", () => {
       writeConfig(ctx)
       const full = makeBuckets({ 0: 3, 19: 4 })
       wireRelay(ctx, {
         files: [
           makeAccount({ auth_index: "a", recent_requests: full }),
-          // Only the last three buckets of the same grid.
-          makeAccount({ auth_index: "b", recent_requests: full.slice(17).map((b) => ({ ...b, success: 2 })) }),
+          // Only the last three buckets of the same grid, with a failure.
+          makeAccount({ auth_index: "b", recent_requests: full.slice(17).map((b) => ({ ...b, success: 2, failed: 1 })) }),
         ],
       })
-      const line = lineByLabel(plugin.probe(ctx), "Accounts · 5h")
-      const lengths = line.rows.map((row) => row.buckets.length)
-      expect(lengths).toEqual([20, 20])
-      const short = line.rows.find((row) => row.buckets[0] === 0 && row.buckets[19] === 2)
-      expect(short.buckets.slice(0, 17)).toEqual(new Array(17).fill(0))
+      const pool = poolOf(plugin.probe(ctx))
+      expect(pool.accounts.map((a) => a.requests.length)).toEqual([20, 20])
+      const short = pool.accounts.find((a) => a.id === "b")
+      expect(short.requests.slice(0, 17)).toEqual(new Array(17).fill(0))
+      expect(short.requests[19]).toBe(2)
+      expect(short.failures[19]).toBe(1)
       // The axis is the grid, not the first row stitched to the last.
-      expect(line.axis).toBe("17:20 → 20:40 relay time · 10-min buckets")
+      expect(pool.axis).toBe("17:20 → 20:40 relay time · 10-min buckets")
     })
   })
 
@@ -756,15 +746,16 @@ describe("antigravity-pool plugin", () => {
   })
 
   describe("malformed relay data", () => {
-    it("does not claim a window refills now when the reset is unparseable", () => {
+    it("passes a reset through untouched so the app can drop one it cannot parse", () => {
       writeConfig(ctx)
       wireRelay(ctx, {
         files: [makeAccount({ auth_index: "a" })],
         quotaFor: () => ({ weeklyReset: "soon", fiveReset: "later" }),
       })
-      const rows = lineByLabel(plugin.probe(ctx), "Accounts · 5h").rows
-      expect(rows[0].note).toBe("idle")
-      expect(rows[0].tooltip ?? "").not.toContain("resets in now")
+      const pool = poolOf(plugin.probe(ctx))
+      // Pool resets only count ones still ahead, so garbage never becomes "now".
+      expect(pool.five.resetsAt).toBeUndefined()
+      expect(pool.accounts[0].five.resetsAt).toBe("later")
     })
 
     it("says so loudly when the stored state is corrupt", () => {
@@ -780,10 +771,10 @@ describe("antigravity-pool plugin", () => {
     it("reports the pool error rate", () => {
       writeConfig(ctx)
       wireRelay(ctx, { files: [makeAccount({ success: 990, failed: 10 })] })
-      expect(lineByLabel(plugin.probe(ctx), "Rotation").value).toBe("1.0% errors")
+      expect(poolOf(plugin.probe(ctx)).errorRate).toBeCloseTo(1.0)
     })
 
-    it("names an account failing well above the pool rate", () => {
+    it("reports the worst account's rate", () => {
       writeConfig(ctx)
       const files = [
         makeAccount({ auth_index: "a", success: 1000, failed: 5 }),
@@ -791,21 +782,17 @@ describe("antigravity-pool plugin", () => {
         makeAccount({ auth_index: "c", success: 547, failed: 19 }),
       ]
       wireRelay(ctx, { files })
-      const rotation = lineByLabel(plugin.probe(ctx), "Rotation")
-      expect(rotation.subtitle).toBe("worst account 3.4%")
-      expect(rotation.color).toBeUndefined()
+      expect(poolOf(plugin.probe(ctx)).worstRate).toBeCloseTo(3.36, 1)
     })
 
-    it("flags an offline account in red", () => {
+    it("counts an offline account", () => {
       writeConfig(ctx)
       const files = [
         makeAccount({ auth_index: "a" }),
         makeAccount({ auth_index: "b", unavailable: true }),
       ]
       wireRelay(ctx, { files })
-      const rotation = lineByLabel(plugin.probe(ctx), "Rotation")
-      expect(rotation.subtitle).toBe("1 account offline")
-      expect(rotation.color).toBe("#ef4444")
+      expect(poolOf(plugin.probe(ctx)).counts).toMatchObject({ total: 2, offline: 1 })
     })
   })
 

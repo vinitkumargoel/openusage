@@ -35,6 +35,7 @@ export type MetricLine =
       color?: string
     }
   | { type: "accounts"; label: string; rows: AccountRow[]; color?: string }
+  | { type: "pool"; label: string; pool: PoolData; color?: string }
 
 /** A percent bar on an account row (5h, 7d). */
 export type AccountBar = {
@@ -48,6 +49,49 @@ export type AccountBar = {
   /** Whether the current rate lasts to reset, and when it runs out. */
   lasts?: boolean
   emptyAt?: string
+}
+
+/** A quota window: percent left and when it refills. */
+export type PoolWindow = { left: number; resetsAt?: string; periodMs?: number }
+
+/** One account pooled behind a relay. */
+export type PoolAccount = {
+  id: string
+  name: string
+  state: "live" | "cooling" | "offline" | "sampling"
+  /** "free" (no 5h bucket) or "model" (a model is parked). */
+  tag?: string
+  five?: PoolWindow
+  week?: PoolWindow
+  restFive?: PoolWindow
+  restWeek?: PoolWindow
+  /** Per recent bucket, on the pool's shared `slots`. */
+  requests: number[]
+  failures: number[]
+  /** Lifetime counters. */
+  ok: number
+  failed: number
+  cooldown?: { reason: string; until: string }
+  models?: { model: string; until: string }[]
+  project?: string
+  joinedAt?: string
+  refreshedAt?: string
+  sampledAt?: string
+}
+
+export type PoolData = {
+  five?: PoolWindow
+  week?: PoolWindow
+  restFive?: PoolWindow
+  restWeek?: PoolWindow
+  counts: { total: number; live: number; cooling: number; offline: number; sampled: number; unreachable: number }
+  /** Percent. */
+  errorRate?: number
+  worstRate?: number
+  cohorts: { count: number; left: number; resetsAt: string }[]
+  slots: string[]
+  axis?: string
+  accounts: PoolAccount[]
 }
 
 /** A label/value pair shown in an account's detail sheet. */
@@ -77,7 +121,7 @@ export type HistogramRow = {
 export type HistogramColumns = { buckets: string; value: string; note: string }
 
 export type ManifestLine = {
-  type: "text" | "progress" | "badge" | "heatmap" | "histogram" | "accounts"
+  type: "text" | "progress" | "badge" | "heatmap" | "histogram" | "accounts" | "pool"
   label: string
   scope: "overview" | "detail"
 }

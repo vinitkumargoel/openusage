@@ -131,6 +131,11 @@ export const makeCtx = () => {
       if (opts.color) line.color = opts.color
       return line
     },
+    pool: (opts) => {
+      const line = { type: "pool", label: opts.label, pool: opts.pool }
+      if (opts.color) line.color = opts.color
+      return line
+    },
   }
 
   ctx.fmt = {

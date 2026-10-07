@@ -1,5 +1,6 @@
 use crate::plugin_engine::host_api;
 use crate::plugin_engine::accounts_line::{self, AccountRow};
+use crate::plugin_engine::pool_line::{self, PoolData};
 use crate::plugin_engine::host_cswap;
 use crate::plugin_engine::manifest::LoadedPlugin;
 use rquickjs::{Array, Context, Ctx, Error, Object, Promise, Runtime, Value};
@@ -64,6 +65,12 @@ pub enum MetricLine {
     Accounts {
         label: String,
         rows: Vec<AccountRow>,
+        color: Option<String>,
+    },
+    /// Accounts pooled behind a relay: summary plus one tile each.
+    Pool {
+        label: String,
+        pool: PoolData,
         color: Option<String>,
     },
 }
@@ -623,6 +630,10 @@ fn parse_lines(result: &Object) -> Result<Vec<MetricLine>, String> {
                 Ok(rows) => out.push(MetricLine::Accounts { label, rows, color }),
                 Err(msg) => out.push(error_line(msg)),
             },
+            "pool" => match pool_line::parse_pool(line.ctx(), &line, idx) {
+                Ok(pool) => out.push(MetricLine::Pool { label, pool, color }),
+                Err(msg) => out.push(error_line(msg)),
+            },
             _ => {
                 out.push(error_line(format!(
                     "unknown line type at index {}: {}",
@@ -1125,6 +1136,22 @@ mod tests {
         );
         let output = run_probe(&plugin, &temp_app_dir("accounts-id"), "0.0.0");
         assert!(error_text(output).contains("row id must be a slot number"));
+    }
+
+    #[test]
+    fn pool_line_parses_through_builder() {
+        let plugin = test_plugin(
+            r#"globalThis.__openusage_plugin = { probe: function(ctx) {
+                    return { lines: [ctx.line.pool({ label: "Accounts", pool: {
+                        five: { left: 49, periodMs: 18000000 }, counts: { total: 1, live: 1 },
+                        accounts: [{ id: "a1", name: "carbon", state: "live", restWeek: { left: 97 } }] } })] };
+                } };"#,
+        );
+        let output = run_probe(&plugin, &temp_app_dir("pool"), "0.0.0");
+        let json = serde_json::to_value(&output.lines[0]).unwrap();
+        assert_eq!(json["type"], "pool");
+        assert_eq!(json["pool"]["five"]["periodMs"], 18000000.0);
+        assert_eq!(json["pool"]["accounts"][0]["restWeek"]["left"], 97.0);
     }
 
     #[test]

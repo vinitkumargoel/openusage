@@ -115,14 +115,14 @@ loading skeletons instantly while probes execute asynchronously.
 
 | Field     | Type    | Required | Description                                       |
 |-----------|---------|----------|---------------------------------------------------|
-| `type`    | string  | Yes      | One of: `text`, `progress`, `badge`, `heatmap`, `histogram`, `accounts` |
+| `type`    | string  | Yes      | One of: `text`, `progress`, `badge`, `heatmap`, `histogram`, `accounts`, `pool` |
 | `label`   | string  | Yes      | Static label shown in the UI for this line        |
 | `scope`   | string  | Yes      | `"overview"` or `"detail"` - where line appears   |
 | `primary` | boolean | No       | If `true`, this progress line appears in tray icon |
 
 - `"overview"` - shown on both Overview tab and plugin detail pages
 - `"detail"` - shown only on plugin detail pages
-- A plugin with an `accounts` line: its detail page shows only the accounts line (it has its own summary), not the overview lines
+- A plugin with an `accounts` or `pool` line: its detail page shows that line (it has its own summary), not the overview lines
 
 ### Primary Progress (Tray Icon)
 
@@ -201,6 +201,13 @@ type MetricLine =
               bars: { label: string; used: number; resetsAt?: string; periodMs?: number;
                       expected?: number; lasts?: boolean; emptyAt?: string }[];
               stats?: { label: string; value: string }[] }[];
+      color?: string;
+    }
+  | {
+      type: "pool"; // accounts pooled behind a relay; see ctx.line.pool in api.md
+      label: string;
+      pool: { five?, week?, restFive?, restWeek?, counts, errorRate?, worstRate?,
+              cohorts: [], slots: string[], axis?: string, accounts: [] };
       color?: string;
     }
 ```
