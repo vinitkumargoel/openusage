@@ -76,7 +76,7 @@ export function hasTokenCounts(days: HeatmapDay[]): boolean {
   return days.length > 0 && days.every((day) => typeof day.tokens === "number")
 }
 
-function buildCells(days: HeatmapDay[], now: Date, showTokens: boolean): Cell[] {
+function buildCells(days: HeatmapDay[], now: Date, showTokens: boolean, weeks = HEATMAP_WEEKS): Cell[] {
   const dayByKey = new Map<string, HeatmapDay>()
   for (const day of days) {
     dayByKey.set(day.date, day)
@@ -87,7 +87,7 @@ function buildCells(days: HeatmapDay[], now: Date, showTokens: boolean): Cell[] 
 
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const start = new Date(today)
-  start.setDate(start.getDate() - today.getDay() - (HEATMAP_WEEKS - 1) * 7)
+  start.setDate(start.getDate() - today.getDay() - (weeks - 1) * 7)
 
   const cells: Cell[] = []
   const cursor = new Date(start)
@@ -153,9 +153,30 @@ interface UsageHeatmapProps {
   days: HeatmapDay[]
   format?: ProgressFormat | null
   brandColor?: string
+  /** Stretch FLUID_WEEKS across the card width and show a period total. */
+  fluid?: boolean
 }
 
-function UsageHeatmapInner({ days, format, brandColor }: UsageHeatmapProps) {
+export const FLUID_WEEKS = 26
+
+function periodSummary(cells: Cell[], format: ProgressFormat | null | undefined, showTokens: boolean): string {
+  let total = 0
+  let active = 0
+  for (const cell of cells) {
+    if (cell.value > 0) {
+      total += cell.value
+      active++
+    }
+  }
+  const totalText = showTokens
+    ? formatTokenCount(total)
+    : format?.kind === "dollars"
+      ? `$${Math.round(total).toLocaleString("en-US")}`
+      : formatHeatmapValue(total, format)
+  return `${totalText} in 6 months · ${active} active day${active === 1 ? "" : "s"}`
+}
+
+function UsageHeatmapInner({ days, format, brandColor, fluid = false }: UsageHeatmapProps) {
   const isDark = useDarkMode()
   const heatmapUnit = useAppPreferencesStore((state) => state.heatmapUnit)
   const [tooltip, setTooltip] = useState<{ x: number; y: number; text: string } | null>(null)
@@ -180,7 +201,8 @@ function UsageHeatmapInner({ days, format, brandColor }: UsageHeatmapProps) {
   // Token units only apply to plugins that send token counts; everyone else
   // keeps their own unit whatever the setting says.
   const showTokens = heatmapUnit === "tokens" && hasTokenCounts(days)
-  const cells = useMemo(() => buildCells(days, new Date(), showTokens), [days, showTokens])
+  const weeks = fluid ? FLUID_WEEKS : HEATMAP_WEEKS
+  const cells = useMemo(() => buildCells(days, new Date(), showTokens, weeks), [days, showTokens, weeks])
   const monthLabels = useMemo(() => buildMonthLabels(cells), [cells])
 
   const baseColor = adjustBrandColor(brandColor, isDark, FALLBACK_BASE_COLOR)
@@ -205,6 +227,68 @@ function UsageHeatmapInner({ days, format, brandColor }: UsageHeatmapProps) {
 
   // Pad the final week column so the grid stays rectangular.
   const padCount = cells.length % 7 === 0 ? 0 : 7 - (cells.length % 7)
+
+  const legend = (
+    <div className="flex items-center gap-[3px]" aria-hidden="true">
+      <span className="mr-0.5">Less</span>
+      {[0, 1, 2, 3, 4].map((level) => (
+        <div key={level} className="h-[9px] w-[9px] rounded-[2px] bg-muted" style={cellStyle(level)} />
+      ))}
+      <span className="ml-0.5">More</span>
+    </div>
+  )
+  const tooltipEl = tooltip && (
+    <div
+      ref={tooltipRef}
+      className="pointer-events-none fixed z-50 whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1 text-xs text-popover-foreground shadow-md tabular-nums"
+      style={{ left: tooltipPos.left, top: tooltipPos.top }}
+    >
+      {tooltip.text}
+    </div>
+  )
+
+  if (fluid) {
+    const columns = `24px repeat(${weeks}, minmax(0, 1fr))`
+    const lastKey = cells[cells.length - 1]?.key
+    return (
+      <div className="text-muted-foreground">
+        <div className="grid h-3.5 text-[9px] leading-3" style={{ gridTemplateColumns: columns, columnGap: 2 }} aria-hidden="true">
+          {monthLabels.filter(({ column }) => column < weeks - 2).map(({ column, label }) => (
+            <span key={column} className="whitespace-nowrap" style={{ gridColumn: column + 2, gridRow: 1 }}>
+              {label}
+            </span>
+          ))}
+        </div>
+        <div
+          className="grid"
+          style={{ gridTemplateColumns: columns, gridTemplateRows: "repeat(7, auto)", gridAutoFlow: "column", gap: 2 }}
+          onMouseOver={handleMouseOver}
+          onMouseMove={handleMouseMove}
+          onMouseLeave={handleMouseLeave}
+        >
+          {DOW_LABELS.map((label, row) => (
+            <span key={label} className="flex items-center text-[9px]" aria-hidden="true">
+              {row % 2 === 1 ? label : ""}
+            </span>
+          ))}
+          {cells.map((cell) => (
+            <div
+              key={cell.key}
+              className={`aspect-square w-full rounded-[2px] bg-muted${cell.key === lastKey ? " outline outline-[1.5px] -outline-offset-1 outline-foreground/60" : ""}`}
+              style={cellStyle(cell.level)}
+              data-tip={cellTitle(cell, format, showTokens)}
+              aria-label={cellLabel(cell, format, showTokens)}
+            />
+          ))}
+        </div>
+        <div className="mt-1.5 flex items-center justify-between gap-2 text-[10px]">
+          <span className="truncate tabular-nums">{periodSummary(cells, format, showTokens)}</span>
+          {legend}
+        </div>
+        {tooltipEl}
+      </div>
+    )
+  }
 
   return (
     <div className="text-muted-foreground">

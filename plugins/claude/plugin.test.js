@@ -1763,7 +1763,7 @@ describe("claude plugin", () => {
       }
     })
 
-    it("adds Last 30 Days line summing entries within the 31-day window", async () => {
+    it("adds Last 30 Days line summing entries within the 30-day window", async () => {
       const todayKey = localDayKey(new Date())
       const ctx = makeProbeCtx({
         ccusageResult: okUsage([
@@ -1779,7 +1779,7 @@ describe("claude plugin", () => {
       expect(last30.value).toContain("$1.50")
     })
 
-    it("excludes entries older than 31 days from Last 30 Days (regression)", async () => {
+    it("excludes entries older than 30 days from Last 30 Days (regression)", async () => {
       const todayKey = localDayKey(new Date())
       const ctx = makeProbeCtx({
         ccusageResult: okUsage([
@@ -1793,6 +1793,90 @@ describe("claude plugin", () => {
       expect(last30).toBeTruthy()
       expect(last30.value).toContain("150 tokens")
       expect(last30.value).toContain("$0.50")
+    })
+
+    it("leaves non-Claude models out of cost, tokens and the heatmap (regression)", async () => {
+      const todayKey = localDayKey(new Date())
+      const ctx = makeProbeCtx({
+        ccusageResult: okUsage([
+            {
+              date: todayKey, totalTokens: 1150, totalCost: 3.5,
+              modelBreakdowns: [
+                { modelName: "claude-opus-5-5", inputTokens: 100, outputTokens: 50, cacheCreationTokens: 0, cacheReadTokens: 0, cost: 1.25 },
+                { modelName: "gemini-3.8-flash", inputTokens: 1000, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0, cost: 2.25 },
+              ],
+            },
+          ]),
+      })
+      const plugin = await loadPlugin()
+      const result = plugin.probe(ctx)
+      expect(result.lines.find((l) => l.label === "Today").value).toBe("$1.25 \u00b7 150 tokens")
+      expect(result.lines.find((l) => l.label === "Last 30 Days").value).toBe("$1.25 \u00b7 150 tokens")
+      const heatmap = result.lines.find((l) => l.label === "Activity")
+      expect(heatmap.days).toEqual([{ date: todayKey, value: 1.25, tokens: 150 }])
+    })
+
+    it("counts exactly 30 days in Last 30 Days (regression)", async () => {
+      const todayKey = localDayKey(new Date())
+      const ctx = makeProbeCtx({
+        ccusageResult: okUsage([
+            { date: todayKey, inputTokens: 1, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0, totalTokens: 1, totalCost: 1 },
+            { date: daysAgoKey(29), inputTokens: 10, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0, totalTokens: 10, totalCost: 10 },
+            { date: daysAgoKey(30), inputTokens: 100, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0, totalTokens: 100, totalCost: 100 },
+          ]),
+      })
+      const plugin = await loadPlugin()
+      const result = plugin.probe(ctx)
+      expect(result.lines.find((l) => l.label === "Last 30 Days").value).toBe("$11.00 \u00b7 11 tokens")
+    })
+
+    function withCostLog(ctx, rows) {
+      const now = new Date()
+      const month = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0")
+      const text = rows.map((row) => JSON.stringify(row)).join("\n") + "\n"
+      ctx.host.fs.exists = (path) => !String(path).includes("openusage-cost-") || String(path).includes(month)
+      ctx.host.fs.readText = (path) => (String(path).includes("openusage-cost-") ? text : CRED_JSON)
+      return ctx
+    }
+
+    it("uses Claude Code's logged session cost when it is higher than ccusage (regression)", async () => {
+      const todayKey = localDayKey(new Date())
+      const t = Date.now() - 60 * 1000
+      const ctx = withCostLog(makeProbeCtx({
+        ccusageResult: okUsage([
+            { date: todayKey, inputTokens: 100, outputTokens: 50, cacheCreationTokens: 0, cacheReadTokens: 0, totalTokens: 150, totalCost: 1 },
+          ]),
+      }), [
+        // resumed session: 263 is restored cost, only growth counts
+        { t: t, s: "a", m: "claude-opus-5-5", c: 263 },
+        { t: t + 1, s: "a", m: "claude-opus-5-5", c: 265.5 },
+        { t: t + 2, s: "b", m: "claude-opus-5-5", c: 0 },
+        { t: t + 3, s: "b", m: "claude-opus-5-5", c: 1.5 },
+        // claude9 session on another model: Claude Code prices it at Opus rates
+        { t: t + 4, s: "g", m: "gemini-3.8-flash-high", c: 0 },
+        { t: t + 5, s: "g", m: "gemini-3.8-flash-high", c: 50 },
+      ])
+      const plugin = await loadPlugin()
+      const result = plugin.probe(ctx)
+      expect(result.lines.find((l) => l.label === "Today").value).toBe("$4.00 \u00b7 150 tokens")
+      expect(result.lines.find((l) => l.label === "Last 30 Days").value).toBe("$4.00 \u00b7 150 tokens")
+      expect(result.lines.find((l) => l.label === "Activity").days).toEqual([{ date: todayKey, value: 4, tokens: 150 }])
+    })
+
+    it("keeps ccusage cost when the logged cost is lower", async () => {
+      const todayKey = localDayKey(new Date())
+      const t = Date.now() - 60 * 1000
+      const ctx = withCostLog(makeProbeCtx({
+        ccusageResult: okUsage([
+            { date: todayKey, inputTokens: 100, outputTokens: 50, cacheCreationTokens: 0, cacheReadTokens: 0, totalTokens: 150, totalCost: 9 },
+          ]),
+      }), [
+        { t: t, s: "a", m: "claude-opus-5-5", c: 0 },
+        { t: t + 1, s: "a", m: "claude-opus-5-5", c: 2 },
+      ])
+      const plugin = await loadPlugin()
+      const result = plugin.probe(ctx)
+      expect(result.lines.find((l) => l.label === "Today").value).toBe("$9.00 \u00b7 150 tokens")
     })
 
     it("emits an Activity heatmap line with per-day cost and token values", async () => {

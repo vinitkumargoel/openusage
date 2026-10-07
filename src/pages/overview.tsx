@@ -35,6 +35,7 @@ export function OverviewPage({
           name={plugin.meta.name}
           plan={plugin.data?.plan}
           brandColor={plugin.meta.brandColor}
+          layout={plugin.meta.layout}
           showSeparator={index < plugins.length - 1}
           loading={plugin.loading}
           error={plugin.error}

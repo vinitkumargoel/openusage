@@ -619,6 +619,45 @@ describe("antigravity-pool plugin", () => {
       expect(row.color).toBeUndefined()
     })
 
+    it("ignores model-scoped cooldowns for account-level cooling, showing them in tooltips", () => {
+      writeConfig(ctx)
+      const retryAt = new Date(NOW_MS + 41 * 60 * 1000).toISOString()
+      const files = [
+        makeAccount({
+          auth_index: "a",
+          cooldowns: [
+            { scope: "model", model_key: "gemini-3.1-flash-image", reason: "quota", retry_at: retryAt },
+          ],
+        }),
+      ]
+      wireRelay(ctx, { files, quotaFor: () => ({ gemFive: 0.8, gemWeek: 0.75 }) })
+      const result = plugin.probe(ctx)
+      const [row] = rowsOf(result)
+      expect(row.value).toBe("80%")
+      expect(row.color).toBeUndefined()
+      expect(row.tooltip).toContain("cooling: gemini-3.1-flash-image")
+      expect(lineByLabel(result, "Gemini weekly").used).toBe(25)
+      expect(lineByLabel(result, "Pool").subtitle).toBeUndefined()
+    })
+
+    it("falls back to all cached entries when every account in the pool is cooling", () => {
+      writeConfig(ctx)
+      const retryAt = new Date(NOW_MS + 41 * 60 * 1000).toISOString()
+      const files = [
+        makeAccount({
+          auth_index: "a",
+          cooldowns: [{ scope: "credential", reason: "credential_quota", retry_at: retryAt }],
+        }),
+      ]
+      wireRelay(ctx, { files, quotaFor: () => ({ gemFive: 0.8, gemWeek: 0.6 }) })
+      const result = plugin.probe(ctx)
+      const [cooling] = rowsOf(result)
+      expect(cooling).toMatchObject({ value: "cooling", note: "41m", color: "#ef4444" })
+      expect(lineByLabel(result, "Gemini weekly").used).toBe(40)
+      expect(lineByLabel(result, "Gemini 5h").used).toBe(20)
+      expect(lineByLabel(result, "Pool").subtitle).toBe("1 cooling")
+    })
+
     it("handles a free-tier account with no 5h bucket, an idle window, and an offline account", () => {
       writeConfig(ctx)
       const files = [

@@ -67,6 +67,8 @@ pub struct PluginMeta {
     pub primary_candidates: Vec<String>,
     /// Fields the Settings page renders for this plugin, if it declares any.
     pub settings: Vec<PluginSettingFieldDto>,
+    /// Card layout, e.g. "ledger". None = default list.
+    pub layout: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -459,6 +461,7 @@ fn list_plugins(state: tauri::State<'_, Mutex<AppState>>) -> Vec<PluginMeta> {
                         help: field.help.clone(),
                     })
                     .collect(),
+                layout: plugin.manifest.layout,
             }
         })
         .collect()

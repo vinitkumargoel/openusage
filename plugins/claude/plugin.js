@@ -603,6 +603,84 @@
     return null
   }
 
+  // Sessions run through a relay (e.g. Gemini behind CLIProxyAPI) land in the
+  // same Claude Code logs, so ccusage prices them into the Claude day. Only
+  // Claude models belong on this card; days without a per-model breakdown are
+  // taken as-is.
+  //
+  // `loggedUsd` is Claude Code's own billed total for the day (see
+  // loggedCostByDay). Transcripts miss calls, so the larger of the two wins.
+  function claudeDayUsage(day, loggedUsd) {
+    const usage = transcriptDayUsage(day)
+    if (typeof loggedUsd === "number" && (usage.cost == null || loggedUsd > usage.cost)) {
+      usage.cost = loggedUsd
+    }
+    return usage
+  }
+
+  function transcriptDayUsage(day) {
+    if (!day || typeof day !== "object") return { tokens: 0, cost: null }
+    const breakdowns = Array.isArray(day.modelBreakdowns) ? day.modelBreakdowns : null
+    if (!breakdowns || breakdowns.length === 0) {
+      return { tokens: Number(day.totalTokens) || 0, cost: usageCostUsd(day) }
+    }
+    let tokens = 0
+    let costNanos = 0
+    let hasCost = false
+    for (let i = 0; i < breakdowns.length; i++) {
+      const b = breakdowns[i]
+      if (!b || !/claude/i.test(String(b.modelName || ""))) continue
+      tokens += (Number(b.inputTokens) || 0) + (Number(b.outputTokens) || 0) +
+        (Number(b.cacheCreationTokens) || 0) + (Number(b.cacheReadTokens) || 0)
+      const cost = Number(b.cost)
+      if (Number.isFinite(cost)) {
+        costNanos += Math.round(cost * 1e9)
+        hasCost = true
+      }
+    }
+    return { tokens: tokens, cost: hasCost ? costNanos / 1e9 : 0 }
+  }
+
+  // Claude Code's running session cost, appended by the statusline script to
+  // <claude home>/openusage-cost-YYYY-MM.jsonl as {"t":ms,"s":session,"m":model,"c":usd}
+  // on every change. The transcripts ccusage prices leave out some billed calls
+  // (classifier, compaction, side queries) and under-record output tokens; this
+  // total is what Claude Code itself bills. A session's growth between lines is
+  // credited to the day it happened. Its first line is only a baseline: a
+  // resumed session starts from the cost it had before. A drop means a reset.
+  function loggedCostByDay(ctx, claudeHome, now) {
+    const months = [new Date(now.getFullYear(), now.getMonth() - 1, 1), now]
+    const entries = []
+    for (let i = 0; i < months.length; i++) {
+      const month = months[i].getMonth() + 1
+      const path = claudeHome + "/openusage-cost-" + months[i].getFullYear() + "-" + (month < 10 ? "0" : "") + month + ".jsonl"
+      if (!ctx.host.fs.exists(path)) continue
+      const rows = ctx.host.fs.readText(path).split("\n")
+      for (let r = 0; r < rows.length; r++) {
+        const row = ctx.util.tryParseJson(rows[r])
+        if (!row || typeof row.s !== "string" || !Number.isFinite(row.t) || !Number.isFinite(row.c)) continue
+        entries.push(row)
+      }
+    }
+    if (entries.length === 0) return null
+    entries.sort(function (a, b) { return a.t - b.t })
+    const last = {}
+    const days = {}
+    for (let i = 0; i < entries.length; i++) {
+      const row = entries[i]
+      const previous = last[row.s]
+      last[row.s] = row.c
+      if (typeof previous !== "number") continue
+      // claude9 sessions run other models that Claude Code prices at Opus rates.
+      if (!/claude/i.test(String(row.m || ""))) continue
+      const delta = row.c >= previous ? row.c - previous : row.c
+      if (delta <= 0) continue
+      const key = dayKeyFromDate(new Date(row.t))
+      days[key] = (days[key] || 0) + delta
+    }
+    return days
+  }
+
   function costAndTokensLabel(data, opts) {
     const includeZeroTokens = !!(opts && opts.includeZeroTokens)
     const parts = []
@@ -613,13 +691,12 @@
     return parts.join(" \u00b7 ")
   }
 
-  function pushDayUsageLine(lines, ctx, label, dayEntry) {
-    const tokens = Number(dayEntry && dayEntry.totalTokens) || 0
-    const cost = usageCostUsd(dayEntry)
-    if (tokens > 0) {
+  function pushDayUsageLine(lines, ctx, label, dayEntry, loggedUsd) {
+    const usage = claudeDayUsage(dayEntry, loggedUsd)
+    if (usage.tokens > 0 || usage.cost > 0) {
       lines.push(ctx.line.text({
         label: label,
-        value: costAndTokensLabel({ tokens: tokens, costUSD: cost })
+        value: costAndTokensLabel({ tokens: usage.tokens, costUSD: usage.cost })
       }))
       return
     }
@@ -861,6 +938,7 @@
       const yesterday = new Date(now.getTime())
       yesterday.setDate(yesterday.getDate() - 1)
       const yesterdayKey = dayKeyFromDate(yesterday)
+      const logged = loggedCostByDay(ctx, getClaudeHomePath(ctx), now) || {}
 
       let todayEntry = null
       let yesterdayEntry = null
@@ -879,12 +957,11 @@
       for (let i = 0; i < usage.daily.length; i++) {
         const usageDayKey = dayKeyFromUsageDate(usage.daily[i].date)
         if (!usageDayKey) continue
-        const dayCost = usageCostUsd(usage.daily[i])
-        const dayTokens = Number(usage.daily[i].totalTokens)
+        const dayUsage = claudeDayUsage(usage.daily[i], logged[usageDayKey])
         heatmapDays.push({
           date: usageDayKey,
-          value: dayCost != null ? dayCost : 0,
-          tokens: Number.isFinite(dayTokens) && dayTokens > 0 ? dayTokens : 0
+          value: dayUsage.cost != null ? dayUsage.cost : 0,
+          tokens: dayUsage.tokens > 0 ? dayUsage.tokens : 0
         })
       }
       if (heatmapDays.length > 0) {
@@ -895,12 +972,13 @@
         }))
       }
 
-      pushDayUsageLine(lines, ctx, "Today", todayEntry)
-      pushDayUsageLine(lines, ctx, "Yesterday", yesterdayEntry)
+      pushDayUsageLine(lines, ctx, "Today", todayEntry, logged[todayKey])
+      pushDayUsageLine(lines, ctx, "Yesterday", yesterdayEntry, logged[yesterdayKey])
 
-      // The query window is ~147 days for the heatmap; this line stays 31 days.
+      // The query window is ~147 days for the heatmap; this line is today plus
+      // the 29 days before it.
       const thirtyDaysAgo = new Date(now.getTime())
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29)
       const thirtyDaysAgoKey = dayKeyFromDate(thirtyDaysAgo)
       let totalTokens = 0
       let totalCostNanos = 0
@@ -909,13 +987,10 @@
         const day = usage.daily[i]
         const usageDayKey = dayKeyFromUsageDate(day.date)
         if (!usageDayKey || usageDayKey < thirtyDaysAgoKey) continue
-        const dayTokens = Number(day.totalTokens)
-        if (Number.isFinite(dayTokens)) {
-          totalTokens += dayTokens
-        }
-        const dayCost = usageCostUsd(day)
-        if (dayCost != null) {
-          totalCostNanos += Math.round(dayCost * 1e9)
+        const dayUsage = claudeDayUsage(day, logged[usageDayKey])
+        totalTokens += dayUsage.tokens
+        if (dayUsage.cost != null) {
+          totalCostNanos += Math.round(dayUsage.cost * 1e9)
           hasCost = true
         }
       }

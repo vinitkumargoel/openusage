@@ -968,6 +968,7 @@ mod tests {
                 lines: vec![],
                 links: vec![],
                 settings: vec![],
+                layout: None,
             },
             plugin_dir: PathBuf::from("."),
             entry_script: entry_script.to_string(),

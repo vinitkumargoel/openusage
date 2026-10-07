@@ -63,6 +63,7 @@ export function ProviderDetailPage({
       name={plugin.meta.name}
       plan={plugin.data?.plan}
       brandColor={plugin.meta.brandColor}
+      layout={plugin.meta.layout}
       links={plugin.meta.links}
       showSeparator={false}
       loading={plugin.loading}

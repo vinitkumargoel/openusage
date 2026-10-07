@@ -10,6 +10,7 @@ import { SkeletonLines } from "@/components/skeleton-lines"
 import { UsageHeatmap } from "@/components/usage-heatmap"
 import { UsageHistogram } from "@/components/usage-histogram"
 import { AccountList } from "@/components/account-list"
+import { LedgerCard } from "@/components/ledger-card"
 import { PluginError } from "@/components/plugin-error"
 import { useNowTicker } from "@/hooks/use-now-ticker"
 import { REFRESH_COOLDOWN_MS, type DisplayMode, type ResetTimerDisplayMode, type TimeFormatMode } from "@/lib/settings"
@@ -42,6 +43,8 @@ interface ProviderCardProps {
   resetTimerDisplayMode?: ResetTimerDisplayMode
   timeFormatMode?: TimeFormatMode
   onResetTimerDisplayModeToggle?: () => void
+  /** "ledger" swaps the plain line list for tiles, a limits table and an activity section. */
+  layout?: string | null
 }
 
 const PACE_VISUALS: Record<PaceStatus, { dotClass: string }> = {
@@ -120,6 +123,7 @@ export function ProviderCard({
   resetTimerDisplayMode = "relative",
   timeFormatMode = "auto",
   onResetTimerDisplayModeToggle,
+  layout = null,
 }: ProviderCardProps) {
   const cooldownRemainingMs = useMemo(() => {
     if (!lastManualRefreshAt) return 0
@@ -313,7 +317,32 @@ export function ProviderCard({
           <SkeletonLines lines={filteredSkeletonLines} />
         )}
 
-        {hasStaleData && (
+        {hasStaleData && layout === "ledger" && (
+          <LedgerCard
+            lines={filteredLines}
+            brandColor={brandColor}
+            displayMode={displayMode}
+            resetTimerDisplayMode={resetTimerDisplayMode}
+            timeFormatMode={timeFormatMode}
+            onResetTimerDisplayModeToggle={onResetTimerDisplayModeToggle}
+            now={now}
+            renderLine={(line, key) => (
+              <MetricLineRenderer
+                key={key}
+                line={line}
+                brandColor={brandColor}
+                displayMode={displayMode}
+                resetTimerDisplayMode={resetTimerDisplayMode}
+                timeFormatMode={timeFormatMode}
+                onResetTimerDisplayModeToggle={onResetTimerDisplayModeToggle}
+                now={now}
+                refreshing={isRefreshingWithData}
+              />
+            )}
+          />
+        )}
+
+        {hasStaleData && layout !== "ledger" && (
           <div className="space-y-4">
             {groupLinesByType(filteredLines).map((group, gi) =>
               group.kind === "text" ? (

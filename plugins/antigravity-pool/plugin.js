@@ -148,6 +148,7 @@
         failed: numOf(file.failed),
         buckets: parseBuckets(file.recent_requests),
         cooling: parseCooldown(file.cooldowns),
+        modelCooldowns: parseModelCooldowns(file.cooldowns),
       })
     }
     if (accounts.length === 0) throw "No Antigravity accounts in the CLIProxy pool"
@@ -176,12 +177,15 @@
 
   // The relay parks an account after a 429 and says until when. That is the
   // one signal that flags a dead account before Google's fraction moves.
+  // Model-scoped cooldowns (scope: "model") only park that specific model
+  // (e.g. image generation) while the account still serves other models.
   function parseCooldown(raw) {
     if (!Array.isArray(raw)) return null
     var best = null
     for (var i = 0; i < raw.length; i++) {
       var entry = raw[i]
       if (!entry || typeof entry !== "object") continue
+      if (entry.scope === "model") continue
       var untilMs = typeof entry.retry_at === "string" ? Date.parse(entry.retry_at) : NaN
       if (!Number.isFinite(untilMs)) continue
       if (!best || untilMs > best.untilMs) {
@@ -189,6 +193,21 @@
       }
     }
     return best
+  }
+
+  function parseModelCooldowns(raw) {
+    if (!Array.isArray(raw)) return []
+    var models = []
+    for (var i = 0; i < raw.length; i++) {
+      var entry = raw[i]
+      if (!entry || typeof entry !== "object") continue
+      if (entry.scope !== "model") continue
+      var untilMs = typeof entry.retry_at === "string" ? Date.parse(entry.retry_at) : NaN
+      if (!Number.isFinite(untilMs)) continue
+      var key = String(entry.model_key || entry.model || "").trim()
+      if (key) models.push({ model: key, untilMs: untilMs })
+    }
+    return models
   }
 
   function parseQuota(body) {
@@ -347,15 +366,20 @@
   // Cooling accounts are still sampled (Google's fraction is what says how
   // much they have left) but a parked account contributes nothing to the pool
   // right now, so it stays out of the mean like an offline one.
+  // When every account is cooling, fall back to all cached entries so the card
+  // displays quota and reset countdowns instead of failing.
   function sampledEntries(accounts, state, nowMs) {
-    var entries = []
+    var liveEntries = []
+    var allEntries = []
     for (var i = 0; i < accounts.length; i++) {
       if (accounts[i].offline) continue
-      if (accounts[i].cooling && accounts[i].cooling.untilMs > nowMs) continue
       var cached = state.accounts[accounts[i].authIndex]
-      if (cached) entries.push(cached)
+      if (!cached) continue
+      allEntries.push(cached)
+      if (accounts[i].cooling && accounts[i].cooling.untilMs > nowMs) continue
+      liveEntries.push(cached)
     }
-    return entries
+    return liveEntries.length > 0 ? liveEntries : allEntries
   }
 
   // Requests are handed to accounts round-robin, so the pool behaves like one
@@ -575,6 +599,17 @@
     }
     if (account.buckets.length > 0) {
       tips.push(requests + " requests in the last " + account.buckets.length * 10 + "m" + (failed > 0 ? " · " + failed + " failed" : ""))
+    }
+    if (account.modelCooldowns && account.modelCooldowns.length > 0) {
+      var activeModels = []
+      for (var m = 0; m < account.modelCooldowns.length; m++) {
+        if (account.modelCooldowns[m].untilMs > nowMs && activeModels.indexOf(account.modelCooldowns[m].model) < 0) {
+          activeModels.push(account.modelCooldowns[m].model)
+        }
+      }
+      if (activeModels.length > 0) {
+        tips.push("cooling: " + activeModels.join(", "))
+      }
     }
     if (tips.length > 0) row.tooltip = tips.join(" · ")
     return row

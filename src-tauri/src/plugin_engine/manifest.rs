@@ -57,6 +57,9 @@ pub struct PluginManifest {
     pub links: Vec<PluginLink>,
     #[serde(default)]
     pub settings: Vec<PluginSettingField>,
+    /// Card layout the frontend should use, e.g. "ledger". None = default list.
+    #[serde(default)]
+    pub layout: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -237,6 +240,15 @@ mod tests {
 
     fn parse_manifest(json: &str) -> PluginManifest {
         serde_json::from_str::<PluginManifest>(json).expect("manifest parse failed")
+    }
+
+    #[test]
+    fn layout_is_optional() {
+        let base = r#""schemaVersion": 1, "id": "x", "name": "X", "version": "0.0.1",
+              "entry": "plugin.js", "icon": "icon.svg", "brandColor": null, "lines": []"#;
+        assert_eq!(parse_manifest(&format!("{{{base}}}")).layout, None);
+        let manifest = parse_manifest(&format!("{{{base}, \"layout\": \"ledger\"}}"));
+        assert_eq!(manifest.layout.as_deref(), Some("ledger"));
     }
 
     #[test]

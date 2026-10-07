@@ -99,6 +99,8 @@ export type PluginMeta = {
   /** Ordered list of primary metric candidates. Frontend picks first available. */
   primaryCandidates: string[]
   settings?: PluginSettingField[]
+  /** Card layout. "ledger" = tiles + limits table + usage strip + activity. */
+  layout?: string | null
 }
 
 export type PluginDisplayState = {
