@@ -9,6 +9,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { SkeletonLines } from "@/components/skeleton-lines"
 import { UsageHeatmap } from "@/components/usage-heatmap"
 import { UsageHistogram } from "@/components/usage-histogram"
+import { AccountList } from "@/components/account-list"
 import { PluginError } from "@/components/plugin-error"
 import { useNowTicker } from "@/hooks/use-now-ticker"
 import { REFRESH_COOLDOWN_MS, type DisplayMode, type ResetTimerDisplayMode, type TimeFormatMode } from "@/lib/settings"
@@ -20,6 +21,8 @@ import { buildPaceDetailText, formatDeficitText, formatRunsOutText, getPaceStatu
 import { formatResetAbsoluteLabel, formatResetRelativeLabel, formatResetTooltipText } from "@/lib/reset-tooltip"
 
 interface ProviderCardProps {
+  /** Needed by lines that act on the provider (account switching). */
+  providerId?: string
   name: string
   plan?: string
   brandColor?: string
@@ -32,6 +35,8 @@ interface ProviderCardProps {
   lastManualRefreshAt?: number | null
   lastUpdatedAt?: number | null
   onRetry?: () => void
+  /** Re-probe providers right away, skipping the manual-refresh cooldown. */
+  onRefreshPlugins?: (pluginIds: string[]) => void
   scopeFilter?: "overview" | "all"
   displayMode: DisplayMode
   resetTimerDisplayMode?: ResetTimerDisplayMode
@@ -96,6 +101,7 @@ function formatRelativeTime(diffMs: number): string {
 }
 
 export function ProviderCard({
+  providerId,
   name,
   plan,
   brandColor,
@@ -108,6 +114,7 @@ export function ProviderCard({
   lastManualRefreshAt,
   lastUpdatedAt,
   onRetry,
+  onRefreshPlugins,
   scopeFilter = "all",
   displayMode,
   resetTimerDisplayMode = "relative",
@@ -322,6 +329,8 @@ export function ProviderCard({
                       onResetTimerDisplayModeToggle={onResetTimerDisplayModeToggle}
                       now={now}
                       refreshing={isRefreshingWithData}
+                      providerId={providerId}
+                      onRefreshPlugins={onRefreshPlugins}
                     />
                   ))}
                 </div>
@@ -338,6 +347,8 @@ export function ProviderCard({
                       onResetTimerDisplayModeToggle={onResetTimerDisplayModeToggle}
                       now={now}
                       refreshing={isRefreshingWithData}
+                      providerId={providerId}
+                      onRefreshPlugins={onRefreshPlugins}
                     />
                   ))}
                 </Fragment>
@@ -361,6 +372,8 @@ function MetricLineRenderer({
   onResetTimerDisplayModeToggle,
   now,
   refreshing,
+  providerId,
+  onRefreshPlugins,
 }: {
   line: MetricLine
   brandColor?: string
@@ -370,6 +383,8 @@ function MetricLineRenderer({
   onResetTimerDisplayModeToggle?: () => void
   now: number
   refreshing?: boolean
+  providerId?: string
+  onRefreshPlugins?: (pluginIds: string[]) => void
 }) {
   if (line.type === "heatmap") {
     return (
@@ -380,6 +395,16 @@ function MetricLineRenderer({
           format={line.format}
           brandColor={line.color ?? brandColor}
         />
+      </div>
+    )
+  }
+
+  if (line.type === "accounts") {
+    if (!providerId) throw new Error("accounts line rendered without a providerId")
+    return (
+      <div>
+        <div className="text-sm font-medium mb-1.5">{line.label}</div>
+        <AccountList providerId={providerId} rows={line.rows} now={now} onSwitched={onRefreshPlugins} />
       </div>
     )
   }

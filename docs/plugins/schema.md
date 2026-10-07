@@ -115,7 +115,7 @@ loading skeletons instantly while probes execute asynchronously.
 
 | Field     | Type    | Required | Description                                       |
 |-----------|---------|----------|---------------------------------------------------|
-| `type`    | string  | Yes      | One of: `text`, `progress`, `badge`, `heatmap`, `histogram` |
+| `type`    | string  | Yes      | One of: `text`, `progress`, `badge`, `heatmap`, `histogram`, `accounts` |
 | `label`   | string  | Yes      | Static label shown in the UI for this line        |
 | `scope`   | string  | Yes      | `"overview"` or `"detail"` - where line appears   |
 | `primary` | boolean | No       | If `true`, this progress line appears in tray icon |
@@ -191,6 +191,13 @@ type MetricLine =
       rows: { label: string; buckets: number[]; value: string; note: string; color?: string; tooltip?: string }[];
       columns?: { buckets: string; value: string; note: string };
       axis?: string;
+      color?: string;
+    }
+  | {
+      type: "accounts"; // claude-accounts only: rows get a Switch button
+      label: string;
+      rows: { id: string; name: string; detail?: string; active?: boolean; flag?: string;
+              bars: { label: string; used: number; resetsAt?: string }[] }[];
       color?: string;
     }
 ```

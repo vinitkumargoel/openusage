@@ -54,6 +54,23 @@ export function useProbeRefreshActions({
     [manualRefreshIdsRef, pluginStatesRef, resetAutoUpdateSchedule, startManualRefresh]
   )
 
+  // After an action changed the data behind these providers (an account
+  // switch), so the manual-refresh cooldown doesn't apply.
+  const handleRefreshPlugins = useCallback(
+    (ids: string[]) => {
+      if (!pluginSettings) return
+      const enabled = new Set(getEnabledPluginIds(pluginSettings))
+      const eligibleIds = ids.filter((id) => {
+        if (!enabled.has(id)) return false
+        if (pluginStatesRef.current[id]?.loading) return false
+        return !manualRefreshIdsRef.current.has(id)
+      })
+      if (eligibleIds.length === 0) return
+      startManualRefresh(eligibleIds, "Failed to refresh plugins:")
+    },
+    [pluginSettings, pluginStatesRef, manualRefreshIdsRef, startManualRefresh]
+  )
+
   const handleRefreshAll = useCallback(() => {
     if (!pluginSettings) return
     const enabledIds = getEnabledPluginIds(pluginSettings)
@@ -76,6 +93,7 @@ export function useProbeRefreshActions({
 
   return {
     handleRetryPlugin,
+    handleRefreshPlugins,
     handleRefreshAll,
   }
 }

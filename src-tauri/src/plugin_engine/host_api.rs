@@ -56,7 +56,7 @@ impl ProbeDeadline {
             .unwrap_or(false)
     }
 
-    fn clamp_duration(self, requested: Duration) -> Option<Duration> {
+    pub(crate) fn clamp_duration(self, requested: Duration) -> Option<Duration> {
         let Some(expires_at) = self.expires_at else {
             return Some(requested);
         };
@@ -658,6 +658,7 @@ pub(crate) fn inject_host_api_with_deadline<'js>(
     inject_sqlite(ctx, &host)?;
     inject_ls(ctx, &host, plugin_id)?;
     inject_ccusage(ctx, &host, plugin_id, deadline)?;
+    super::host_cswap::inject_cswap(ctx, &host, plugin_id, deadline)?;
 
     probe_ctx.set("host", host)?;
     globals.set("__openusage_ctx", probe_ctx)?;
@@ -1043,6 +1044,11 @@ pub fn inject_utils(ctx: &rquickjs::Ctx<'_>) -> rquickjs::Result<()> {
                     var line = { type: "histogram", label: opts.label, rows: opts.rows };
                     if (opts.columns) line.columns = opts.columns;
                     if (opts.axis) line.axis = opts.axis;
+                    if (opts.color) line.color = opts.color;
+                    return line;
+                },
+                accounts: function(opts) {
+                    var line = { type: "accounts", label: opts.label, rows: opts.rows };
                     if (opts.color) line.color = opts.color;
                     return line;
                 }

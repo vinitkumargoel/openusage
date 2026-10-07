@@ -46,6 +46,39 @@ describe("useProbeRefreshActions", () => {
     expect(manualRefreshIdsRef.current.has("codex")).toBe(true)
   })
 
+  it("refreshes named plugins right away, skipping cooldown but not disabled or busy ones", () => {
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(1_000_000)
+    const startBatch = vi.fn().mockResolvedValue(undefined)
+    const setLoadingForPlugins = vi.fn()
+    const resetAutoUpdateSchedule = vi.fn()
+
+    const { result } = renderHook(() =>
+      useProbeRefreshActions({
+        pluginSettings: { order: ["claude-accounts", "claude", "codex"], disabled: ["codex"] },
+        pluginStatesRef: {
+          current: {
+            "claude-accounts": { data: null, loading: false, error: null, lastManualRefreshAt: 999_000, lastUpdatedAt: null },
+            claude: { data: null, loading: false, error: null, lastManualRefreshAt: null, lastUpdatedAt: null },
+          },
+        },
+        manualRefreshIdsRef: { current: new Set<string>() },
+        resetAutoUpdateSchedule,
+        setLoadingForPlugins,
+        setErrorForPlugins: vi.fn(),
+        startBatch,
+      })
+    )
+
+    act(() => {
+      result.current.handleRefreshPlugins(["claude-accounts", "claude", "codex", "unknown"])
+    })
+
+    expect(startBatch).toHaveBeenCalledWith(["claude-accounts", "claude"])
+    expect(setLoadingForPlugins).toHaveBeenCalledWith(["claude-accounts", "claude"])
+    expect(resetAutoUpdateSchedule).not.toHaveBeenCalled()
+    nowSpy.mockRestore()
+  })
+
   it("filters out ineligible plugins for refresh-all", () => {
     const nowSpy = vi.spyOn(Date, "now").mockReturnValue(1_000_000)
     const startBatch = vi.fn().mockResolvedValue(undefined)

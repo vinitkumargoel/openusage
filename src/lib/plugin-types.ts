@@ -34,6 +34,20 @@ export type MetricLine =
       axis?: string | null
       color?: string
     }
+  | { type: "accounts"; label: string; rows: AccountRow[]; color?: string }
+
+/** A percent bar on an account row (5h, 7d). */
+export type AccountBar = { label: string; used: number; resetsAt?: string }
+
+/** One stored login. `id` is the slot the app passes to `switch_account`. */
+export type AccountRow = {
+  id: string
+  name: string
+  detail?: string
+  active: boolean
+  flag?: string
+  bars: AccountBar[]
+}
 
 /** One labelled row of small bars, with a value and a note on the right. */
 export type HistogramRow = {
@@ -48,7 +62,7 @@ export type HistogramRow = {
 export type HistogramColumns = { buckets: string; value: string; note: string }
 
 export type ManifestLine = {
-  type: "text" | "progress" | "badge" | "heatmap" | "histogram"
+  type: "text" | "progress" | "badge" | "heatmap" | "histogram" | "accounts"
   label: string
   scope: "overview" | "detail"
 }

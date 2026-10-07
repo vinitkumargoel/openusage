@@ -63,6 +63,7 @@ export function SkeletonLine({ line }: { line: ManifestLine }) {
     case "heatmap":
       return <SkeletonHeatmap label={line.label} />
     case "histogram":
+    case "accounts":
       return <SkeletonHistogram label={line.label} />
     default:
       return <SkeletonText label={line.label} />

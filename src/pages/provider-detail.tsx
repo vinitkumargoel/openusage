@@ -7,6 +7,7 @@ import type { DisplayMode, ResetTimerDisplayMode, TimeFormatMode } from "@/lib/s
 interface ProviderDetailPageProps {
   plugin: PluginDisplayState | null
   onRetry?: () => void
+  onRefreshPlugins?: (pluginIds: string[]) => void
   displayMode: DisplayMode
   resetTimerDisplayMode: ResetTimerDisplayMode
   timeFormatMode?: TimeFormatMode
@@ -16,6 +17,7 @@ interface ProviderDetailPageProps {
 export function ProviderDetailPage({
   plugin,
   onRetry,
+  onRefreshPlugins,
   displayMode,
   resetTimerDisplayMode,
   timeFormatMode = "auto",
@@ -57,6 +59,7 @@ export function ProviderDetailPage({
 
   return (
     <ProviderCard
+      providerId={plugin.meta.id}
       name={plugin.meta.name}
       plan={plugin.data?.plan}
       brandColor={plugin.meta.brandColor}
@@ -69,6 +72,7 @@ export function ProviderDetailPage({
       lastManualRefreshAt={plugin.lastManualRefreshAt}
       lastUpdatedAt={plugin.lastUpdatedAt}
       onRetry={onRetry}
+      onRefreshPlugins={onRefreshPlugins}
       scopeFilter="all"
       displayMode={displayMode}
       resetTimerDisplayMode={resetTimerDisplayMode}

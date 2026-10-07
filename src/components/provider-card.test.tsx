@@ -128,6 +128,26 @@ describe("ProviderCard", () => {
     expect(screen.getByLabelText("alien-agency, 65%, 2h 58m")).toBeInTheDocument()
   })
 
+  it("renders an accounts line with Switch buttons when it knows the provider", () => {
+    const accounts = {
+      type: "accounts" as const,
+      label: "Accounts",
+      rows: [
+        { id: "1", name: "personal", active: true, bars: [] },
+        { id: "2", name: "work", active: false, bars: [] },
+      ],
+    }
+    render(<ProviderCard providerId="claude-accounts" name="Claude Accounts" displayMode="used" lines={[accounts]} />)
+    expect(screen.getByText("Accounts")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Switch to work" })).toBeInTheDocument()
+
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    expect(() => render(<ProviderCard name="Claude Accounts" displayMode="used" lines={[accounts]} />)).toThrow(
+      "accounts line rendered without a providerId"
+    )
+    vi.mocked(console.error).mockRestore()
+  })
+
   it("shows loading spinner when retry is enabled", () => {
     const { container } = render(
       <ProviderCard

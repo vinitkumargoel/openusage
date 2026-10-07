@@ -126,6 +126,11 @@ export const makeCtx = () => {
       if (opts.color) line.color = opts.color
       return line
     },
+    accounts: (opts) => {
+      const line = { type: "accounts", label: opts.label, rows: opts.rows }
+      if (opts.color) line.color = opts.color
+      return line
+    },
   }
 
   ctx.fmt = {

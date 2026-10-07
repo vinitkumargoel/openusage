@@ -26,6 +26,7 @@ type AppContentDerivedProps = {
 
 export type AppContentActionProps = {
   onRetryPlugin: (id: string) => void
+  onRefreshPlugins: (ids: string[]) => void
   onReorder: (orderedIds: string[]) => void
   onToggle: (id: string) => void
   onAutoUpdateIntervalChange: (value: AutoUpdateIntervalMinutes) => void
@@ -48,6 +49,7 @@ export function AppContent({
   settingsPlugins,
   selectedPlugin,
   onRetryPlugin,
+  onRefreshPlugins,
   onReorder,
   onToggle,
   onAutoUpdateIntervalChange,
@@ -143,6 +145,7 @@ export function AppContent({
     <ProviderDetailPage
       plugin={selectedPlugin}
       onRetry={handleRetry}
+      onRefreshPlugins={onRefreshPlugins}
       displayMode={displayMode}
       resetTimerDisplayMode={resetTimerDisplayMode}
       timeFormatMode={timeFormatMode}

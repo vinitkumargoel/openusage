@@ -1,4 +1,6 @@
 use crate::plugin_engine::host_api;
+use crate::plugin_engine::accounts_line::{self, AccountRow};
+use crate::plugin_engine::host_cswap;
 use crate::plugin_engine::manifest::LoadedPlugin;
 use rquickjs::{Array, Context, Ctx, Error, Object, Promise, Runtime, Value};
 use serde::{Deserialize, Serialize};
@@ -56,6 +58,12 @@ pub enum MetricLine {
         columns: Option<HistogramColumns>,
         #[serde(skip_serializing_if = "Option::is_none")]
         axis: Option<String>,
+        color: Option<String>,
+    },
+    /// Stored logins with a Switch button each (claude-accounts only).
+    Accounts {
+        label: String,
+        rows: Vec<AccountRow>,
         color: Option<String>,
     },
 }
@@ -179,6 +187,9 @@ fn run_probe_with_timeout(
                 return error_output(plugin, timeout_message.clone());
             }
             return error_output(plugin, "ccusage wrapper patch failed".to_string());
+        }
+        if host_cswap::patch_cswap_wrapper(&ctx).is_err() {
+            return error_output(plugin, "cswap wrapper patch failed".to_string());
         }
         if host_api::inject_utils(&ctx).is_err() {
             if deadline.has_elapsed() {
@@ -608,6 +619,10 @@ fn parse_lines(result: &Object) -> Result<Vec<MetricLine>, String> {
                     color,
                 });
             }
+            "accounts" => match accounts_line::parse_rows(line.ctx(), &line, idx) {
+                Ok(rows) => out.push(MetricLine::Accounts { label, rows, color }),
+                Err(msg) => out.push(error_line(msg)),
+            },
             _ => {
                 out.push(error_line(format!(
                     "unknown line type at index {}: {}",
@@ -1071,6 +1086,62 @@ mod tests {
         );
         let output = run_probe(&plugin, &temp_app_dir("histogram-norows"), "0.0.0");
         assert!(error_text(output).contains("missing rows array"));
+    }
+
+    #[test]
+    fn accounts_line_parses_through_builder_and_serializes_camel_case() {
+        let plugin = test_plugin(
+            r#"
+            globalThis.__openusage_plugin = {
+                probe(ctx) {
+                    return { lines: [ctx.line.accounts({ label: "Accounts", rows: [
+                        { id: "2", name: "work", detail: "w@x.com", active: true,
+                          bars: [{ label: "5h", used: 40, resetsAt: "2026-10-07T20:00:00Z" }] },
+                        { id: "3", name: "side", flag: "limit", bars: [] }
+                    ] })] };
+                }
+            };
+            "#,
+        );
+        let output = run_probe(&plugin, &temp_app_dir("accounts"), "0.0.0");
+        let json = serde_json::to_value(&output.lines[0]).unwrap();
+        assert_eq!(json["type"], "accounts");
+        assert_eq!(json["rows"][0]["active"], true);
+        assert_eq!(json["rows"][0]["bars"][0]["resetsAt"], "2026-10-07T20:00:00Z");
+        assert_eq!(json["rows"][1]["flag"], "limit");
+    }
+
+    #[test]
+    fn accounts_line_with_unsafe_row_id_becomes_error_line() {
+        let plugin = test_plugin(
+            r#"
+            globalThis.__openusage_plugin = {
+                probe() {
+                    return { lines: [{ type: "accounts", label: "Accounts", rows: [{ id: "--purge", name: "x" }] }] };
+                }
+            };
+            "#,
+        );
+        let output = run_probe(&plugin, &temp_app_dir("accounts-id"), "0.0.0");
+        assert!(error_text(output).contains("row id must be a slot number"));
+    }
+
+    #[test]
+    fn cswap_host_api_is_only_given_to_claude_accounts() {
+        let plugin = test_plugin(
+            r#"
+            globalThis.__openusage_plugin = {
+                probe(ctx) {
+                    return { lines: [{ type: "text", label: "cswap", value: typeof ctx.host.cswap }] };
+                }
+            };
+            "#,
+        );
+        let output = run_probe(&plugin, &temp_app_dir("cswap-gate"), "0.0.0");
+        match &output.lines[0] {
+            MetricLine::Text { value, .. } => assert_eq!(value, "undefined"),
+            other => panic!("expected text line, got {:?}", other),
+        }
     }
 
     #[test]

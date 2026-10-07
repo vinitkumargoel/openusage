@@ -53,7 +53,7 @@ export function useProbe({
     startBatch,
   })
 
-  const { handleRetryPlugin, handleRefreshAll } = useProbeRefreshActions({
+  const { handleRetryPlugin, handleRefreshPlugins, handleRefreshAll } = useProbeRefreshActions({
     pluginSettings,
     pluginStatesRef,
     manualRefreshIdsRef,
@@ -71,6 +71,7 @@ export function useProbe({
     autoUpdateNextAt,
     setAutoUpdateNextAt,
     handleRetryPlugin,
+    handleRefreshPlugins,
     handleRefreshAll,
   }
 }

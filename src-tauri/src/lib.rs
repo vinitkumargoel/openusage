@@ -1,6 +1,7 @@
 #[cfg(target_os = "macos")]
 mod app_nap;
 mod config;
+mod cswap;
 mod local_http_api;
 mod panel;
 mod plugin_engine;
@@ -369,6 +370,36 @@ fn update_global_shortcut(
     Ok(())
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AccountSwitched {
+    /// cswap's `{switched, from, to, reason}` payload.
+    result: serde_json::Value,
+    /// Providers to re-probe now that the active login changed.
+    refresh_plugin_ids: Vec<String>,
+}
+
+/// Switches the active Claude Code login through cswap. Only the
+/// claude-accounts provider can switch; `target` is a slot number or "best".
+#[tauri::command]
+async fn switch_account(provider_id: String, target: String) -> Result<AccountSwitched, String> {
+    if provider_id != cswap::PLUGIN_ID {
+        return Err(format!("{provider_id} does not support switching accounts"));
+    }
+    log::info!("switch_account: target={}", target);
+    let result = tauri::async_runtime::spawn_blocking(move || cswap::switch(&target))
+        .await
+        .map_err(|e| format!("switch task failed: {e}"))?
+        .map_err(|e| {
+            log::warn!("switch_account failed: {}", e.message());
+            e.message()
+        })?;
+    Ok(AccountSwitched {
+        result,
+        refresh_plugin_ids: cswap::AFFECTED_PLUGIN_IDS.iter().map(|s| s.to_string()).collect(),
+    })
+}
+
 #[tauri::command]
 fn list_plugins(state: tauri::State<'_, Mutex<AppState>>) -> Vec<PluginMeta> {
     let plugins = {
@@ -587,7 +618,8 @@ pub fn run() {
             get_log_path,
             update_global_shortcut,
             get_plugin_config,
-            set_plugin_config
+            set_plugin_config,
+            switch_account
         ])
         .setup(|app| {
             #[cfg(target_os = "macos")]

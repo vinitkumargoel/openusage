@@ -495,6 +495,35 @@ ctx.line.histogram({
 })
 ```
 
+### `ctx.line.accounts(opts)`
+
+One row per stored login, each with up to 3 percent bars and a **Switch** button.
+Only `claude-accounts` can switch: the button calls the app command
+`switch_account`, which runs `cswap switch <id>`. Plugins never run it.
+
+- `rows[].id`: account slot number as a string (`"1"`–`"999"`). Anything else is rejected.
+- `rows[].bars[].used`: percent, clamped to 0–100.
+- `rows[].flag`: short warning tag (`limit`, `expired`, `off`).
+- Caps: 50 rows, 3 bars per row.
+
+```javascript
+ctx.line.accounts({
+  label: "Accounts",
+  rows: [{ id: "2", name: "work", detail: "work@example.com", active: true,
+           bars: [{ label: "5h", used: 34, resetsAt: "2026-10-07T20:00:00Z" }] }],
+})
+```
+
+## cswap (Claude Accounts only)
+
+```typescript
+host.cswap.list(): { status: "ok", data: object } | { status: "not_installed" } | { status: "error", message: string }
+```
+
+Runs `cswap list --json` (claude-swap) with a 20s timeout, capped by the probe deadline.
+Looks for `cswap` in `~/.local/bin`, `/opt/homebrew/bin`, `/usr/local/bin`. Only the
+`claude-accounts` plugin gets `host.cswap`; `data` is cswap's own JSON (schema version 1).
+
 ## Formatters
 
 Helper functions for formatting values.
